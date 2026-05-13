@@ -1,0 +1,40 @@
+# Environment & secrets
+.env
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Data files (large, PHI-sensitive)
+data/interim/airms/notes/*.parquet
+data/
+mrsa_nlp/rule_based/data/interim/airms/notes/all/*.parquet
+data/interim/airms/*.parquet
+data/interim/airms/*.csv
+!data/interim/airms/.gitkeep
+!data/interim/airms/notes/.gitkeep
+lexicons/
+# Outputs (timestamped run dirs)
+outputs/*/
+!outputs/.gitkeep
+
+# Conda / Python environments
+*.egg-info/
+dist/
+build/
+.eggs/
+env/
+venv/
+
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
