@@ -13,9 +13,11 @@ Output : data/interim/airms/notes_preprocessed/chunk_*.parquet
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+import re
+from typing import Dict, List
+from tqdm import tqdm
 
 import pandas as pd
 
@@ -79,7 +81,7 @@ class PreprocessorConfig:
 CLINICAL_ABBREVIATIONS: Dict[str, str] = {
     r"\bs/p\b":     "status post",
     r"\bw/o\b":     "without",
-    r"\bw/\b":      "with",
+    r"\bw/(?=\s|$)": "with",
     r"\bc/o\b":     "complains of",
     r"\bSOB\b":     "shortness of breath",
     r"\bDOE\b":     "dyspnea on exertion",
@@ -168,7 +170,22 @@ class NotePreprocessor:
             If cfg.raw_notes_dir does not exist or contains no chunk files.
             Prompt the user to run the cohort builder first.
         """
-        pass
+        raw_notes_dir = self.cfg.raw_notes_dir
+
+        if not raw_notes_dir.exists() or not raw_notes_dir.is_dir():
+            raise FileNotFoundError(
+                f"Raw notes directory does not exist: {raw_notes_dir}."
+                "Run the cohort builder first."
+            )
+
+        chunk_files = sorted(raw_notes_dir.glob("chunk_*.parquet"))
+        if not chunk_files:
+            raise FileNotFoundError(
+                f"No chunk_*.parquet files found in {raw_notes_dir}."
+                "Run the cohort builder first."
+            )
+
+        return chunk_files
 
     def load_chunk(self, chunk_path: Path) -> pd.DataFrame:
         """
@@ -186,7 +203,19 @@ class NotePreprocessor:
             NOTE_ID, PERSON_ID, NOTE_DATE, NOTE_TEXT, NOTE_TYPE_CONCEPT_ID,
             VISIT_OCCURRENCE_ID.
         """
-        pass
+        try:
+            df = pd.read_parquet(chunk_path)
+        except Exception:
+            self.log.exception(f"Error loading chunk file {chunk_path}.")
+            raise
+
+        required_cols = {"NOTE_ID", "PERSON_ID", "NOTE_DATE", "NOTE_TEXT", "NOTE_TYPE_CONCEPT_ID", "VISIT_OCCURRENCE_ID"}
+        missing_cols = required_cols - set(df.columns)
+
+        if missing_cols:
+            raise ValueError(f"Chunk file {chunk_path} is missing required columns: {missing_cols}")
+
+        return df
 
     # ------------------------------------------------------------------
     # Text cleaning methods  (one method per transformation)
@@ -207,7 +236,10 @@ class NotePreprocessor:
         str
             Whitespace-normalised text.
         """
-        pass
+        if self.cfg.remove_extra_whitespace:
+            text = re.sub(r"\s+", " ", text)
+
+        return text.strip()
 
     def expand_abbreviations(self, text: str) -> str:
         """
@@ -231,7 +263,17 @@ class NotePreprocessor:
         - Log a debug message with the number of substitutions made per note
           when cfg.debug is True.
         """
-        pass
+        expanded = text
+        n_subs = 0
+
+        for pattern, replacement in CLINICAL_ABBREVIATIONS.items():
+            expanded, new_subs = re.subn(pattern, replacement, expanded, flags=re.IGNORECASE)
+            n_subs += new_subs
+
+        if self.cfg.debug:
+            self.log.debug(f"{n_subs} substitutions made in note.")
+
+        return expanded
 
     def segment_sections(self, text: str) -> Dict[str, str]:
         """
@@ -260,7 +302,8 @@ class NotePreprocessor:
           for "penicillin" only in the MEDICATIONS section rather than in
           the ALLERGIES section).
         """
-        pass
+        # TODO: implement a simple regex-based section segmentation method.
+        return {"FULL_TEXT": text}
 
     # ------------------------------------------------------------------
     # Note-level processing
@@ -285,7 +328,18 @@ class NotePreprocessor:
         str
             Cleaned text, or an empty string if input is None/NaN.
         """
-        pass
+        if text is None or pd.isna(text):
+            return ""
+        
+        cleaned = self.clean_whitespace(text)
+
+        if self.cfg.lowercase:
+            cleaned = cleaned.lower()
+
+        if self.cfg.expand_abbreviations:
+            cleaned = self.expand_abbreviations(cleaned)
+        
+        return cleaned
 
     def filter_notes(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -308,7 +362,37 @@ class NotePreprocessor:
         - Truncate NOTE_TEXT to cfg.max_note_length characters.
         - Log the number of notes dropped at each stage.
         """
-        pass
+        min_note_length = self.cfg.min_note_length
+        max_note_length = self.cfg.max_note_length
+
+        dropped_null = 0
+        dropped_empty = 0
+        dropped_short = 0
+        truncated = 0
+
+        df_filtered = df.copy()
+        note_text = df_filtered["NOTE_TEXT"]
+        non_null_mask = note_text.notna()
+        stripped_text = note_text.fillna("").astype(str).str.strip()
+        non_empty_mask = stripped_text.ne("")
+        length_mask = stripped_text.str.len().ge(min_note_length)
+
+        dropped_null = int((~non_null_mask).sum())
+        dropped_empty = int((non_null_mask & ~non_empty_mask).sum())
+        dropped_short = int((non_null_mask & non_empty_mask & ~length_mask).sum())
+
+        keep_mask = non_null_mask & non_empty_mask & length_mask
+        df_filtered = df_filtered.loc[keep_mask].copy()
+
+        if not df_filtered.empty:
+            over_max_mask = df_filtered["NOTE_TEXT"].astype(str).str.len() > max_note_length
+            truncated = int(over_max_mask.sum())
+            if truncated:
+                df_filtered.loc[over_max_mask, "NOTE_TEXT"] = df_filtered.loc[over_max_mask, "NOTE_TEXT"].astype(str).str.slice(0, max_note_length)
+
+        self.log.info(f"Filtering notes: dropped {dropped_null} null, {dropped_empty} empty, {dropped_short} short; truncated {truncated}.")
+
+        return df_filtered
 
     def deduplicate_notes(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -328,7 +412,19 @@ class NotePreprocessor:
         -----
         - Log how many duplicate notes were removed.
         """
-        pass
+        before_dedup = len(df)
+        text_column = "NOTE_TEXT_CLEAN" if "NOTE_TEXT_CLEAN" in df.columns else "NOTE_TEXT"
+
+        if text_column not in df.columns:
+            raise KeyError("Cannot deduplicate notes: missing NOTE_TEXT or NOTE_TEXT_CLEAN column.")
+
+        df_dedup = df.drop_duplicates(subset=["PERSON_ID", text_column])
+        after_dedup = len(df_dedup)
+        n_dropped = before_dedup - after_dedup
+
+        self.log.info(f"Deduplicating notes: dropped {n_dropped} duplicates.")
+
+        return df_dedup
 
     def process_chunk(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -353,7 +449,18 @@ class NotePreprocessor:
         pd.DataFrame
             Pre-processed notes chunk with NOTE_TEXT_CLEAN column.
         """
-        pass
+        filtered_notes = self.filter_notes(df)
+        filtered_notes["NOTE_TEXT_CLEAN"] = filtered_notes["NOTE_TEXT"].apply(self.process_note_text)
+
+        if self.cfg.segment_sections:
+            filtered_notes["NOTE_SECTIONS"] = filtered_notes["NOTE_TEXT_CLEAN"].apply(self.segment_sections)
+
+        dedup_notes = self.deduplicate_notes(filtered_notes)
+
+        if not self.cfg.keep_original_text and "NOTE_TEXT" in dedup_notes.columns:
+            dedup_notes = dedup_notes.drop(columns=["NOTE_TEXT"])
+
+        return dedup_notes
 
     # ------------------------------------------------------------------
     # Orchestration
@@ -385,4 +492,61 @@ class NotePreprocessor:
           all chunks (stop early once this limit is reached).
         - Use tqdm for a progress bar.
         """
-        pass
+        out_dir = self.cfg.out_dir
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            chunk_files = self.list_chunk_files()
+        except FileNotFoundError as exc:
+            self.log.error(str(exc))
+            raise
+
+        total_in = 0            # cumulative count of notes read from raw chunks
+        total_out = 0           # cumulative count of notes written to preprocessed chunks
+        processed_chunks = 0    # count of chunks successfully processed (for logging)
+
+        debug_limit = self.cfg.debug_n_notes if self.cfg.debug else None
+
+        for chunk_file in tqdm(chunk_files, desc="Processing chunks"):
+            if debug_limit is not None and total_in >= debug_limit:
+                self.log.info(f"Debug limit reached ({debug_limit} notes); stopping early.")
+                break
+
+            out_file = out_dir / chunk_file.name
+            if out_file.exists():
+                self.log.info(f"Preprocessed chunk already exists, skipping: {out_file}")
+                continue
+
+            try:
+                df_raw = self.load_chunk(chunk_file)
+            except Exception:
+                self.log.exception(f"Failed to load chunk {chunk_file}; skipping.")
+                continue
+
+            if debug_limit is not None:
+                remaining = debug_limit - total_in
+                if remaining <= 0:
+                    self.log.info(f"Debug limit reached ({debug_limit} notes); stopping early.")
+                    break
+                if len(df_raw) > remaining:
+                    df_raw = df_raw.iloc[:remaining].copy()
+
+            total_in += len(df_raw)
+
+            try:
+                df_processed = self.process_chunk(df_raw)
+            except Exception:
+                self.log.exception(f"Failed to process chunk {chunk_file}; skipping.")
+                continue
+
+            try:
+                df_processed.to_parquet(out_file, index=False)
+            except Exception:
+                self.log.exception(f"Failed to write processed chunk to {out_file}; skipping.")
+                continue
+
+            total_out += len(df_processed)
+            processed_chunks += 1
+            self.log.info(f"Processed {chunk_file.name}.")
+
+        self.log.info(f"Preprocessing complete. Chunks processed: {processed_chunks}. Notes in: {total_in}. Notes out: {total_out}.")
