@@ -29,6 +29,10 @@ class SubsetConfig:
         Optional CSV file containing the person IDs to keep.
     person_ids_csv_column : str
         Name of the column in the CSV file that stores the person identifier.
+    person_ids_csv_label_column : str
+        Name of the column in the CSV file that stores the label.
+    selected_labels : list[int], optional
+        Allowed labels from the CSV file. Use [0], [1], or [0, 1].
     selected_person_ids : list[str], optional
         Person IDs to keep. Used as a fallback or merged with CSV-based IDs.
     note_title_column : str
@@ -36,12 +40,14 @@ class SubsetConfig:
     selected_note_titles : list[str], optional
         Allowed note titles. If empty, no note-title filter is applied.
     output_path : str | None
-        Optional path where the filtered subset is saved as parquet.
+        Optional directory where chunked parquet files are written.
     """
 
     person_id_column: str = "PERSON_ID"
     person_ids_csv_path: Optional[str] = None
     person_ids_csv_column: str = "PERSON_ID"
+    person_ids_csv_label_column: str = "LABEL"
+    selected_labels: List[int] = field(default_factory=lambda: [0, 1])
     selected_person_ids: List[str] = field(default_factory=list)
     note_title_column: str = "NOTE_TITLE"
     selected_note_titles: List[str] = field(default_factory=list)
@@ -99,8 +105,20 @@ class SubsetBuilder:
                 raise ValueError(
                     f"Missing required column in person CSV: {self.cfg.person_ids_csv_column}"
                 )
+            if self.cfg.person_ids_csv_label_column not in person_df.columns:
+                raise ValueError(
+                    f"Missing required label column in person CSV: {self.cfg.person_ids_csv_label_column}"
+                )
 
-            csv_patient_ids = person_df[self.cfg.person_ids_csv_column].map(
+            allowed_labels = {int(label) for label in self.cfg.selected_labels}
+            if not allowed_labels:
+                raise ValueError("selected_labels must contain at least one value.")
+
+            csv_labels = pd.to_numeric(
+                person_df[self.cfg.person_ids_csv_label_column], errors="coerce"
+            )
+            csv_filtered = person_df[csv_labels.isin(allowed_labels)]
+            csv_patient_ids = csv_filtered[self.cfg.person_ids_csv_column].map(
                 self._normalize_patient_id
             )
             person_ids.update(pid for pid in csv_patient_ids if pid is not None)
@@ -168,7 +186,19 @@ class SubsetBuilder:
         if self.cfg.output_path:
             out_path = Path(self.cfg.output_path)
             out_path.parent.mkdir(parents=True, exist_ok=True)
-            filtered_df.to_parquet(out_path, index=False)
-            self.log.info("Saved filtered subset to %s", out_path)
+            if out_path.suffix:
+                raise ValueError(
+                    "output_path must point to a directory, not a file: %s" % out_path
+                )
+
+            for chunk_index, (_, row) in enumerate(filtered_df.iterrows()):
+                chunk_path = out_path / f"chunk_{chunk_index:04d}.parquet"
+                row.to_frame().T.to_parquet(chunk_path, index=False)
+
+            self.log.info(
+                "Saved %d filtered notes as chunked parquet files to %s",
+                len(filtered_df),
+                out_path,
+            )
 
         return filtered_df
