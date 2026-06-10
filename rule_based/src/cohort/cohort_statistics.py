@@ -145,12 +145,18 @@ class CohortStatistics:
         summary_data = {
             "metric": [
                 "total_notes",
+                "notes_per_type",
                 "unique_patients",
+                "notes_per_patient_min",
+                "notes_per_patient_max",
                 "avg_notes_per_patient",
             ],
             "value": [
                 stats["total_notes"],
+                stats["notes_per_type"].to_dict(orient="records"),
                 stats["unique_patients"],
+                stats["notes_per_patient_distribution"]["notes_per_patient"].min(),
+                stats["notes_per_patient_distribution"]["notes_per_patient"].max(),
                 stats["total_notes"] / max(stats["unique_patients"], 1),
             ],
         }
