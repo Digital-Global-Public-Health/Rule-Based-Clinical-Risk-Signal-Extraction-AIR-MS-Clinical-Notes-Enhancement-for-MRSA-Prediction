@@ -18,6 +18,7 @@ from pathlib import Path
 import re
 from typing import Dict, List
 from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 import pandas as pd
 
@@ -507,46 +508,47 @@ class NotePreprocessor:
 
         debug_limit = self.cfg.debug_n_notes if self.cfg.debug else None
 
-        for chunk_file in tqdm(chunk_files, desc="Processing chunks"):
-            if debug_limit is not None and total_in >= debug_limit:
-                self.log.info(f"Debug limit reached ({debug_limit} notes); stopping early.")
-                break
-
-            out_file = out_dir / chunk_file.name
-            if out_file.exists():
-                self.log.info(f"Preprocessed chunk already exists, skipping: {out_file}")
-                continue
-
-            try:
-                df_raw = self.load_chunk(chunk_file)
-            except Exception:
-                self.log.exception(f"Failed to load chunk {chunk_file}; skipping.")
-                continue
-
-            if debug_limit is not None:
-                remaining = debug_limit - total_in
-                if remaining <= 0:
+        with logging_redirect_tqdm():
+            for chunk_file in tqdm(chunk_files, desc="Processing chunks"):
+                if debug_limit is not None and total_in >= debug_limit:
                     self.log.info(f"Debug limit reached ({debug_limit} notes); stopping early.")
                     break
-                if len(df_raw) > remaining:
-                    df_raw = df_raw.iloc[:remaining].copy()
 
-            total_in += len(df_raw)
+                out_file = out_dir / chunk_file.name
+                if out_file.exists():
+                    self.log.info(f"Preprocessed chunk already exists, skipping: {out_file}")
+                    continue
 
-            try:
-                df_processed = self.process_chunk(df_raw)
-            except Exception:
-                self.log.exception(f"Failed to process chunk {chunk_file}; skipping.")
-                continue
+                try:
+                    df_raw = self.load_chunk(chunk_file)
+                except Exception:
+                    self.log.exception(f"Failed to load chunk {chunk_file}; skipping.")
+                    continue
 
-            try:
-                df_processed.to_parquet(out_file, index=False)
-            except Exception:
-                self.log.exception(f"Failed to write processed chunk to {out_file}; skipping.")
-                continue
+                if debug_limit is not None:
+                    remaining = debug_limit - total_in
+                    if remaining <= 0:
+                        self.log.info(f"Debug limit reached ({debug_limit} notes); stopping early.")
+                        break
+                    if len(df_raw) > remaining:
+                        df_raw = df_raw.iloc[:remaining].copy()
 
-            total_out += len(df_processed)
-            processed_chunks += 1
-            self.log.info(f"Processed {chunk_file.name}.")
+                total_in += len(df_raw)
 
-        self.log.info(f"Preprocessing complete. Chunks processed: {processed_chunks}. Notes in: {total_in}. Notes out: {total_out}.")
+                try:
+                    df_processed = self.process_chunk(df_raw)
+                except Exception:
+                    self.log.exception(f"Failed to process chunk {chunk_file}; skipping.")
+                    continue
+
+                try:
+                    df_processed.to_parquet(out_file, index=False)
+                except Exception:
+                    self.log.exception(f"Failed to write processed chunk to {out_file}; skipping.")
+                    continue
+
+                total_out += len(df_processed)
+                processed_chunks += 1
+                self.log.info(f"Processed {chunk_file.name}.")
+
+            self.log.info(f"Preprocessing complete. Chunks processed: {processed_chunks}. Notes in: {total_in}. Notes out: {total_out}.")
