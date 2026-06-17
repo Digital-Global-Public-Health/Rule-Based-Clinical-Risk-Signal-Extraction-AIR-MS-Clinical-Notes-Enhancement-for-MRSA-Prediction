@@ -53,7 +53,9 @@ class SubsetConfig:
     selected_labels: List[int] = field(default_factory=lambda: [0, 1])
     selected_person_ids: List[str] = field(default_factory=list)
     note_title_column: str = "NOTE_TITLE"
-    selected_note_titles: List[str] = field(default_factory=list)
+    selected_note_titles: List[str] = field(default_factory=lambda: [
+        "H&P", "Progress Notes", "Discharge Summary", "Consults"
+    ])
     output_path: Optional[str] = None
     chunk_size: int = 1
 

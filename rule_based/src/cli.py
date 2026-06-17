@@ -36,7 +36,7 @@ from rich import print
 
 from src.utils_logging import configure_logging, logger, make_run_dir, save_config_snapshot, log_timing
 from src.utils_seed import set_seed, GLOBAL_SEED
-from src.cohort_subset.subset_builder import SubsetConfig, SubsetBuilder
+from src.cohort.subset_builder import SubsetConfig, SubsetBuilder
 from src.preprocessing.note_preprocessor import PreprocessorConfig, NotePreprocessor
 from src.extraction.lexicon import LexiconConfig, Lexicon
 from src.extraction.negation_handler import NegationConfig, NegationHandler
