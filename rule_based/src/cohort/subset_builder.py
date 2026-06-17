@@ -45,7 +45,7 @@ class SubsetConfig:
         Number of rows per output parquet chunk file. Default is 1 (one row per file).
     """
 
-    mrsa_cohort_notes_path: str
+    mrsa_cohort_notes_path: str = "/sc/arion/projects/MRSA-HPI-MS/airms-app-host-and-hospital-adaptation-of-mrsa/mrsa_nlp/rule_based/data/interim/airms/notes/all/cohort_notes.parquet"
     person_id_column: str = "PERSON_ID"
     person_ids_csv_path: Optional[str] = None
     person_ids_csv_column: str = "PERSON_ID"

@@ -14,7 +14,7 @@ data/interim/airms/*.parquet
 data/interim/airms/*.csv
 !data/interim/airms/.gitkeep
 !data/interim/airms/notes/.gitkeep
-lexicons/
+# lexicons/
 # Outputs (timestamped run dirs)
 outputs/*/
 !outputs/.gitkeep

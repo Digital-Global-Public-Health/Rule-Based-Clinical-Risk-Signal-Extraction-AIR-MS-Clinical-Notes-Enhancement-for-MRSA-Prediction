@@ -9,8 +9,8 @@ against the NER-based pipeline.
 
 ## Overview
 
-This pipeline mines free-text clinical notes from `CDMPHI.NOTES`, applies
-curated regex patterns for 25 MRSA risk factors (corticosteroids, prior MRSA,
+This pipeline builds a subset of mined free-text clinical notes from `CDMPHI.NOTES`, applies
+curated regex patterns for MRSA risk factors (corticosteroids, prior MRSA,
 central lines, dialysis, immunosuppressants, …), handles negation using a
 window-based NegEx heuristic, and aggregates the per-note signals to a
 visit-level feature matrix labelled with the same case/control cohort used
@@ -21,13 +21,10 @@ by `mrsa_risk_predictions`.
 ## Dataflow
 
 ```
-mrsa_risk_predictions/
-  data/interim/airms/
-    mrsa_visit_cohort.parquet          ← shared cohort source (read-only)
-          │
-          ▼
-          data/interim/airms/notes/all/cohort_notes.parquet
-          (merged cohort notes — mined from CDMPHI.NOTES via CohortBuilder)
+/sc/arion/projects/
+  MRSA-HPI-MS/airms-app-host-and-hospital-adaptation-of-mrsa/
+    mrsa_nlp/rule_based/
+      data/interim/airms/notes/all/cohort_notes.parquet         ← shared cohort source (read-only)
           │
           ▼
 ┌─────────────────────────────────────────────────────────────────┐
@@ -108,11 +105,11 @@ mrsa_risk_predictions/
 ┌─────────────────────────────────────────────────────────────────┐
 │  STEP 5 · Evaluator  (src/evaluation/evaluator.py)              │
 │                                                                 │
-│  · Feature prevalence by LABEL (cases vs controls)             │
+│  · Feature prevalence by LABEL (cases vs controls)              │
 │  · If gold standard CSV provided:                               │
 │      precision / recall / F1 per risk factor                    │
 │  · Plots: prevalence bar chart, metrics chart, label dist.      │
-│  · Validation report: pass/fail vs target P ≥ 0.90, R ≥ 0.70   │
+│  · Validation report: pass/fail vs target P ≥ 0.90, R ≥ 0.70    │
 └────────────────────────┬────────────────────────────────────────┘
                          │
                          ▼
@@ -157,14 +154,16 @@ rule_based/
 │   │   └── rule_extractor.py    # ExtractorConfig + RuleExtractor
 │   ├── features/
 │   │   └── feature_aggregator.py # AggregatorConfig + FeatureAggregator
-│   └── evaluation/
-│       └── evaluator.py         # EvaluatorConfig + RuleEvaluator
+│   ├── evaluation/
+│   │   └── evaluator.py         # EvaluatorConfig + RuleEvaluator
+│   └── statistics/
+│       └── cohort_statistics.py # analysis and visualization
 ├── data/
 │   └── interim/airms/
 │       ├── notes/               # raw note chunks (mined from HANA)
 │       ├── notes_preprocessed/  # cleaned note chunks
 │       └── extractions/         # per-note feature chunks
-├── outputs/                     # timestamped run directories
+├── outputs/                     # timestamped run directories, statistics output
 ├── .env.example                 # copy to .env and fill credentials
 └── .gitignore
 ```
@@ -176,34 +175,17 @@ rule_based/
 ### 1 — Create the conda environment
 
 ```bash
-cd mrsa_nlp/rule_based
+cd rule_based
 conda env create -f env/environment.yml
 conda activate mrsa-nlp-rule
 ```
 
-### 2 — Configure credentials
+### 2 — Subset builder (no database required)
+
+`build-subset` reads from `cohort_notes.parquet`. No HANA connection is needed for this step.
 
 ```bash
-cp .env.example .env
-# Edit .env — fill in AIRMS_USER, AIRMS_PASSWORD, AIRMS_PORT
-```
-
-`.env` fields:
-
-| Variable | Description |
-|---|---|
-| `AIRMS_HOST` | `127.0.0.1` (always via SSH tunnel) |
-| `AIRMS_PORT` | local tunnel port (e.g. `54321`) |
-| `AIRMS_USER` | your SAP HANA username |
-| `AIRMS_PASSWORD` | your SAP HANA password |
-| `AIRMS_DATABASE` | `AIRMS` |
-
-### 3 — Subset builder (no database required)
-
-`build-cohort` reads from `cohort_notes.parquet`. No HANA connection is needed for this step.
-
-```bash
-bash scripts/run_cohort_builder.sh
+bash scripts/run_subset_builder.sh
 ```
 
 ---
@@ -214,7 +196,7 @@ bash scripts/run_cohort_builder.sh
 
 ```bash
 conda activate mrsa-nlp-rule
-cd mrsa_nlp/rule_based
+cd rule_based
 
 # Step 1: build note subset from cohort_notes.parquet
 bash scripts/run_subset_builder.sh
@@ -260,7 +242,7 @@ Options:
   --help            Show this message and exit.
 
 Commands:
-  build-cohort        Load MRSA cohort and mine notes from CDMPHI.NOTES
+  build-subset        Load MRSA cohort and filter by Patient ID and Note Type
   preprocess          Clean and normalise raw clinical note chunks
   extract             Run regex-based risk-signal extraction
   aggregate-features  Aggregate per-note extractions to visit-level matrix
@@ -274,8 +256,10 @@ Commands:
 
 ```bash
 python -m src.cli build-subset \
-    --notes-path          data/interim/airms/notes/all/cohort_notes.parquet \
-    --cohort-csv-path     data/interim/airms/mrsa_cohort_person_list.csv \
+    --notes-path          /sc/arion/projects/MRSA-HPI-MS/airms-app-host-and-hospital-adaptation-of-mrsa/
+                            mrsa_nlp/rule_based/data/interim/airms/notes/all/cohort_notes.parquet \
+    --cohort-csv-path     /sc/arion/projects/MRSA-HPI-MS/airms-app-host-and-hospital-adaptation-of-mrsa/
+                            mrsa_nlp/rule_based/data/interim/airms/mrsa_cohort_person_list.csv \
     --selected-labels     "1" \
     --out-dir             data/interim/airms/subset_notes \
     --chunk-size          1
