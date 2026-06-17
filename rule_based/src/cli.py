@@ -6,8 +6,8 @@ Usage (from project root, with conda env activated):
 
     python -m src.cli --help
 
-    # Step 1 — build cohort + mine notes
-    python -m src.cli build-cohort [OPTIONS]
+    # Step 1 — build subset
+    python -m src.cli build-subset [OPTIONS]
 
     # Step 2 — preprocess raw notes
     python -m src.cli preprocess [OPTIONS]
@@ -35,9 +35,8 @@ import warnings
 from rich import print
 
 from src.utils_logging import configure_logging, logger, make_run_dir, save_config_snapshot, log_timing
-from src.utils_db import connect_hana
 from src.utils_seed import set_seed, GLOBAL_SEED
-from src.cohort.cohort_builder import CohortConfig, CohortBuilder
+from src.cohort.subset_builder import SubsetConfig, SubsetBuilder
 from src.preprocessing.note_preprocessor import PreprocessorConfig, NotePreprocessor
 from src.extraction.lexicon import LexiconConfig, Lexicon
 from src.extraction.negation_handler import NegationConfig, NegationHandler
@@ -77,51 +76,58 @@ def _configure(
 
 
 # ---------------------------------------------------------------------------
-# 1. build-cohort
+# 1. build-subset
 # ---------------------------------------------------------------------------
 
-@app.command(help="Load the MRSA cohort from mrsa_risk_predictions and mine notes from CDMPHI.NOTES.")
+@app.command(help="Build the MRSA cases-subset from the cohort notes parquet.")
 @log_timing
-def build_cohort(
-    schema: str = typer.Option("CDMPHI", help="HANA schema name."),
-    chunk_size: int = typer.Option(500, help="Persons per note-mining chunk."),
-    min_note_date: str = typer.Option("2014-07-14", help="Earliest note date (YYYY-MM-DD)."),
+def build_subset(
+    notes_path: Path = typer.Option(
+        Path("/sc/arion/projects/MRSA-HPI-MS/airms-app-host-and-hospital-adaptation-of-mrsa/mrsa_nlp/rule_based/data/interim/airms/notes/all/cohort_notes.parquet"),
+        help="Path to the merged cohort notes Parquet file.",
+    ),
+    cohort_csv_path: Optional[Path] = typer.Option(
+        Path("data/subset_person_ids.csv"),
+        help="Optional CSV file with PERSON_ID and LABEL columns for person-ID filtering.",
+    ),
+    selected_labels: str = typer.Option(
+        "1",
+        help="Comma-separated labels to include (e.g. '1' for cases only, '0,1' for all).",
+    ),
+    out_dir: Path = typer.Option(
+        Path("data/interim/airms/notes"),
+        help="Directory for filtered subset note chunks.",
+    ),
+    chunk_size: int = typer.Option(1, help="Notes per output Parquet chunk."),
     debug: bool = typer.Option(False, "--debug/--no-debug", help="Debug mode: limit to a small sample."),
-    debug_n_persons: int = typer.Option(20, help="Persons to process in debug mode."),
-    seed: int = typer.Option(GLOBAL_SEED, "--seed", help=f"Random seed (passed to mrsa_risk_predictions cohort loader; default: {GLOBAL_SEED})."),
 ) -> None:
     """
-    Pipeline Step 1 — Build cohort and mine clinical notes.
+    Pipeline Step 1 — Build note subset.
 
-    Reads the matched-pairs cohort from mrsa_risk_predictions, resolves MRNs,
-    saves mrsa_cohort_person_list.parquet, then fetches notes from CDMPHI.NOTES
-    in person-level chunks.
-
-    The seed is used in the underlying cohort builder for reproducible control sampling.
+    Filters the merged cohort notes parquet by person ID (optional CSV filter)
+    and note title, then saves the filtered notes to chunked Parquet files.
     """
-    cfg = CohortConfig(
-        schema=schema,
+    labels = [int(label.strip()) for label in selected_labels.split(",")]
+    cfg = SubsetConfig(
+        mrsa_cohort_notes_path=str(notes_path),
+        person_id_column="PERSON_ID",
+        person_ids_csv_path=str(cohort_csv_path) if cohort_csv_path else None,
+        person_ids_csv_column="PERSON_ID",
+        person_ids_csv_label_column="LABEL",
+        selected_labels=labels,
+        note_title_column="NOTE_TITLE",
+        selected_note_titles=[],
+        output_path=str(out_dir),
         chunk_size=chunk_size,
-        min_note_date=min_note_date,
-        debug=debug,
-        debug_n_persons=debug_n_persons,
     )
 
     save_config_snapshot(
-        cfg.__dict__ | {"pipeline_step": "build_cohort"},
+        cfg.__dict__ | {"pipeline_step": "build_subset"},
         run_dir=_current_run_dir(),
     )
 
-    conn = connect_hana()
-    builder = CohortBuilder(cfg, conn)
-    person_df = builder.run()
-
-    # logger.info(
-    #     "Cohort built: %d persons  (%d cases, %d controls)",
-    #     len(person_df),
-    #     (person_df["LABEL"] == 1).sum() if person_df is not None else 0,
-    #     (person_df["LABEL"] == 0).sum() if person_df is not None else 0,
-    # )
+    builder = SubsetBuilder(cfg)
+    builder.run()
 
 
 # ---------------------------------------------------------------------------
@@ -318,9 +324,12 @@ def evaluate(
 @app.command(help="Run the complete rule-based pipeline end-to-end.")
 @log_timing
 def run_rule_pipeline(
-    schema: str = typer.Option("CDMPHI"),
+    notes_path: Path = typer.Option(
+        Path("data/interim/airms/notes/all/cohort_notes.parquet"),
+        help="Path to the merged cohort notes Parquet file.",
+    ),
     lexicon_path: Path = typer.Option(Path("lexicons/mrsa_risk_factors_v1.csv")),
-    skip_cohort: bool = typer.Option(False, "--skip-cohort", help="Skip cohort building (notes exist)."),
+    skip_cohort: bool = typer.Option(False, "--skip-cohort", help="Skip subset building (notes exist)."),
     skip_preprocess: bool = typer.Option(False, "--skip-preprocess"),
     skip_extract: bool = typer.Option(False, "--skip-extract"),
     debug: bool = typer.Option(False, "--debug/--no-debug"),
@@ -328,17 +337,15 @@ def run_rule_pipeline(
     """
     Run all pipeline steps sequentially.
 
-    Steps: build-cohort → preprocess → extract → aggregate-features
+    Steps: build-subset → preprocess → extract → aggregate-features
     Use --skip-* flags to resume from a specific step.
     """
     _, run_dir = make_run_dir("full_pipeline")
     logger.info("Full pipeline run dir: %s", run_dir)
 
     if not skip_cohort:
-        logger.info("=== Step 1/4: build-cohort ===")
-        cfg_cohort = CohortConfig(schema=schema, debug=debug)
-        conn = connect_hana()
-        CohortBuilder(cfg_cohort, conn).run()
+        logger.info("=== Step 1/4: build-subset ===")
+        SubsetBuilder(SubsetConfig(mrsa_cohort_notes_path=str(notes_path))).run()
 
     if not skip_preprocess:
         logger.info("=== Step 2/4: preprocess ===")

@@ -34,15 +34,18 @@ class SubsetConfig:
     selected_labels : list[int], optional
         Allowed labels from the CSV file. Use [0], [1], or [0, 1].
     selected_person_ids : list[str], optional
-        Person IDs to keep. Used as a fallback or merged with CSV-based IDs.
+        Person IDs to keep. Merged with CSV-based IDs. Empty by default (no filter).
     note_title_column : str
         Name of the column that stores the note type/title.
     selected_note_titles : list[str], optional
         Allowed note titles. If empty, no note-title filter is applied.
     output_path : str | None
         Optional directory where chunked parquet files are written.
+    chunk_size : int
+        Number of rows per output parquet chunk file. Default is 1 (one row per file).
     """
 
+    mrsa_cohort_notes_path: str
     person_id_column: str = "PERSON_ID"
     person_ids_csv_path: Optional[str] = None
     person_ids_csv_column: str = "PERSON_ID"
@@ -52,6 +55,7 @@ class SubsetConfig:
     note_title_column: str = "NOTE_TITLE"
     selected_note_titles: List[str] = field(default_factory=list)
     output_path: Optional[str] = None
+    chunk_size: int = 1
 
 
 class SubsetBuilder:
@@ -65,6 +69,23 @@ class SubsetBuilder:
     def __init__(self, config: SubsetConfig, logger: logging.Logger = LOG) -> None:
         self.cfg = config
         self.log = logger
+        self.cohort_df = None
+        self.subset_df = None
+
+    # -----------------------------------------------------------------------
+    # load mrsa cohort notes
+    # -----------------------------------------------------------------------
+
+    def load_cohort_notes(self):
+        """Load the MRSA cohort notes from the configured path."""
+        cohort_path = Path(self.cfg.mrsa_cohort_notes_path)
+        if not cohort_path.exists():
+            raise FileNotFoundError(f"MRSA cohort notes file not found: {cohort_path}")
+
+        self.log.info("Loading MRSA cohort notes from %s", cohort_path)
+        self.cohort_df = pd.read_parquet(cohort_path)
+        self.log.info("Loaded %d notes from the MRSA cohort.", len(self.cohort_df))
+
 
     @staticmethod
     def _normalize_patient_id(value: object) -> object | None:
@@ -125,30 +146,21 @@ class SubsetBuilder:
 
         return person_ids
 
-    def select_subset(self, df: pd.DataFrame) -> pd.DataFrame:
+    def select_subset(self):
         """
-        Return the filtered subset of the given dataframe.
+        Loads the MRSA cohort notes and applies filters based on person IDs and note titles.
 
-        Parameters
-        ----------
-        df : pandas.DataFrame
-            Input dataframe to sample from.
-
-        Returns
-        -------
-        pandas.DataFrame
-            Filtered subset.
         """
-        if df is None or df.empty:
-            raise ValueError("Input dataframe is empty.")
+        if self.cohort_df is None or self.cohort_df.empty:
+            raise ValueError("Cohort not loaded or empty. Please run load_cohort_notes() first.")
 
-        working_df = df.copy()
+        working_df = self.cohort_df.copy()
 
         allowed_person_ids = self._load_person_ids()
         if allowed_person_ids:
             if self.cfg.person_id_column not in working_df.columns:
                 raise ValueError(
-                    f"Missing required column: {self.cfg.person_id_column}"
+                    f"Missing required column in cohort dataframe: {self.cfg.person_id_column}"
                 )
             normalized_patient_ids = working_df[self.cfg.person_id_column].map(
                 self._normalize_patient_id
@@ -172,33 +184,61 @@ class SubsetBuilder:
                 .isin(allowed_titles)
             ]
 
-        filtered_df = working_df.reset_index(drop=True)
+        self.subset_df = working_df.reset_index(drop=True)
 
-        if filtered_df.empty:
+        if self.subset_df.empty:
             self.log.warning("No rows left after filtering; returning empty dataframe.")
         else:
             self.log.info(
                 "Selected %d rows from %d input rows.",
-                len(filtered_df),
-                len(df),
+                len(self.subset_df),
+                len(self.cohort_df),
             )
 
+    def save_subset(self):
         if self.cfg.output_path:
             out_path = Path(self.cfg.output_path)
-            out_path.parent.mkdir(parents=True, exist_ok=True)
+
             if out_path.suffix:
                 raise ValueError(
                     "output_path must point to a directory, not a file: %s" % out_path
                 )
 
-            for chunk_index, (_, row) in enumerate(filtered_df.iterrows()):
+            out_path.mkdir(parents=True, exist_ok=True)
+
+            chunk_size = max(1, self.cfg.chunk_size)
+            n_rows = len(self.subset_df)
+            n_chunks = max(1, (n_rows + chunk_size - 1) // chunk_size)
+
+            for chunk_index in range(n_chunks):
+                chunk = self.subset_df.iloc[
+                    chunk_index * chunk_size : (chunk_index + 1) * chunk_size
+                ]
                 chunk_path = out_path / f"chunk_{chunk_index:04d}.parquet"
-                row.to_frame().T.to_parquet(chunk_path, index=False)
+                chunk.to_parquet(chunk_path, index=False)
 
             self.log.info(
-                "Saved %d filtered notes as chunked parquet files to %s",
-                len(filtered_df),
+                "Saved %d filtered notes as %d chunked parquet file(s) to %s",
+                n_rows,
+                n_chunks,
                 out_path,
             )
 
-        return filtered_df
+    # ------------------------------------------------------------------
+    # Orchestration
+    # ------------------------------------------------------------------
+
+    def run(self) -> pd.DataFrame:
+        """
+        Run the full subset selection process.
+        
+        Steps
+        -----
+        1. Load the MRSA cohort notes.
+        2. Select the subset based on person IDs and note titles.
+        3. Save the filtered subset to disk.
+        """
+        self.load_cohort_notes()
+        self.select_subset()
+        self.save_subset()
+        return self.subset_df
