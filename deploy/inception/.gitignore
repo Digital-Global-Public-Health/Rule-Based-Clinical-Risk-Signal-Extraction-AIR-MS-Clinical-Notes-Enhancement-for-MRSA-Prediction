@@ -1,0 +1,6 @@
+# Local env and downloaded/runtime artifacts (never commit these)
+.env
+dist/
+*.jar
+app-data/
+db-data/
