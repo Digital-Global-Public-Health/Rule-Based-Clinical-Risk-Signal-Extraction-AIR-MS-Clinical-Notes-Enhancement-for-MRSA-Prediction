@@ -36,7 +36,7 @@ from rich import print
 
 from src.utils_logging import configure_logging, logger, make_run_dir, save_config_snapshot, log_timing
 from src.utils_seed import set_seed, GLOBAL_SEED
-from src.cohort.subset_builder import SubsetConfig, SubsetBuilder
+from src.cohort_subset.subset_builder import SubsetConfig, SubsetBuilder
 from src.preprocessing.note_preprocessor import PreprocessorConfig, NotePreprocessor
 from src.extraction.lexicon import LexiconConfig, Lexicon
 from src.extraction.negation_handler import NegationConfig, NegationHandler
@@ -87,7 +87,7 @@ def build_subset(
         help="Path to the merged cohort notes Parquet file.",
     ),
     cohort_csv_path: Optional[Path] = typer.Option(
-        Path("data/subset_person_ids.csv"),
+        Path("/sc/arion/projects/MRSA-HPI-MS/airms-app-host-and-hospital-adaptation-of-mrsa/mrsa_nlp/rule_based/data/interim/airms/cohort_subset.csv"),
         help="Optional CSV file with PERSON_ID and LABEL columns for person-ID filtering.",
     ),
     selected_labels: str = typer.Option(
@@ -167,13 +167,8 @@ def preprocess(
         debug_n_notes=debug_n_notes,
     )
 
-    snapshot = {
-        k: str(v) if isinstance(v, Path) else v
-        for k, v in cfg.__dict__.items()
-    }
-
     save_config_snapshot(
-        snapshot | {"pipeline_step": "preprocess"},
+        cfg.__dict__ | {"pipeline_step": "preprocess"},
         run_dir=_current_run_dir(),
     )
 

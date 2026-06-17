@@ -26,19 +26,21 @@ mrsa_risk_predictions/
     mrsa_visit_cohort.parquet          ← shared cohort source (read-only)
           │
           ▼
+          data/interim/airms/notes/all/cohort_notes.parquet
+          (merged cohort notes — mined from CDMPHI.NOTES via CohortBuilder)
+          │
+          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  STEP 1 · Cohort Builder  (src/cohort/cohort_builder.py)        │
+│  STEP 1 · Subset Builder  (src/cohort/subset_builder.py)        │
 │                                                                 │
-│  · Load PERSON_ID + LABEL from mrsa_visit_cohort.parquet        │
-│  · Query CDMPHI.PERSON → resolve MRNs                          │
-│  · Save  data/interim/airms/mrsa_cohort_person_list.parquet     │
-│  · Check if note chunks already exist                           │
-│  · Mine CDMPHI.NOTES in batches of 500 persons                  │
-│    (resume-safe; skips existing chunks)                         │
+│  · Load cohort_notes.parquet                                    │
+│  · Filter by PERSON_ID via optional CSV (PERSON_ID + LABEL)     │
+│  · Filter by NOTE_TITLE (optional)                              │
+│  · Save chunked parquet files to output directory               │
 └────────────────────────┬────────────────────────────────────────┘
                          │
                          ▼
-          data/interim/airms/notes/
+          data/interim/airms/subset_notes/
             chunk_0000.parquet
             chunk_0001.parquet
             …
@@ -136,7 +138,7 @@ rule_based/
 │                                #   ICD codes, drug names, negation notes
 ├── scripts/
 │   ├── start_airms_tunnel.sh    # open SSH tunnel to db.airms.mssm.edu
-│   ├── run_cohort_builder.sh
+│   ├── run_subset_builder.sh    # subset builder wrapper
 │   ├── run_preprocessing.sh
 │   ├── run_feature_extraction.sh
 │   └── run_evaluation.sh
@@ -146,7 +148,7 @@ rule_based/
 │   ├── utils_db.py              # connect_hana() via .env
 │   ├── utils_io.py              # read/write parquet + CSV helpers
 │   ├── cohort/
-│   │   └── cohort_builder.py    # CohortConfig + CohortBuilder
+│   │   └── subset_builder.py    # SubsetConfig + SubsetBuilder  (parquet filtering)
 │   ├── preprocessing/
 │   │   └── note_preprocessor.py # PreprocessorConfig + NotePreprocessor
 │   ├── extraction/
@@ -196,29 +198,13 @@ cp .env.example .env
 | `AIRMS_PASSWORD` | your SAP HANA password |
 | `AIRMS_DATABASE` | `AIRMS` |
 
-### 3 — Database connection (automatic via HPC login node)
+### 3 — Subset builder (no database required)
 
-The SSH tunnel to AIR.MS is established **automatically** through the HPC login node.
-
-No separate setup needed — just run:
+`build-cohort` reads from `cohort_notes.parquet`. No HANA connection is needed for this step.
 
 ```bash
 bash scripts/run_cohort_builder.sh
 ```
-
-The script will:
-1. Prompt for your HANA password
-2. Find a free local port (50000–51000 range)
-3. Establish SSH tunnel: `localhost:PORT → li04e02 → db.airms.mssm.edu:30041`
-4. Set all connection environment variables
-5. Run cohort builder
-6. Clean up tunnel automatically on exit
-
-**Why this approach:**
-- ✓ Works from local machines (via HPC login node)
-- ✓ No need for separate terminal running tunnel
-- ✓ Automatic port discovery avoids conflicts
-- ✓ SSH stability flags (`ServerAliveInterval=60`, `ExitOnForwardFailure`)
 
 ---
 
@@ -230,8 +216,8 @@ The script will:
 conda activate mrsa-nlp-rule
 cd mrsa_nlp/rule_based
 
-# Step 1: build cohort + mine notes
-bash scripts/run_cohort_builder.sh
+# Step 1: build note subset from cohort_notes.parquet
+bash scripts/run_subset_builder.sh
 
 # Step 2: preprocess notes
 bash scripts/run_preprocessing.sh
@@ -246,13 +232,12 @@ bash scripts/run_evaluation.sh outputs/feature_aggregation_<timestamp>/rule_feat
 ### Option B — full pipeline in one command
 
 ```bash
-python -m src.cli run-pipeline --log-level INFO
+python -m src.cli run-rule-pipeline --log-level INFO
 ```
 
-### Debug mode (quick sanity check — 20 persons, no DB required beyond cohort)
+### Debug mode (quick sanity check)
 
 ```bash
-bash scripts/run_cohort_builder.sh --debug
 bash scripts/run_preprocessing.sh --debug
 bash scripts/run_feature_extraction.sh --debug
 ```
@@ -283,23 +268,26 @@ Commands:
   run-pipeline        Run the complete pipeline end-to-end
 ```
 
-### `build-cohort`
+### `build-subset`
+
+`SubsetBuilder` is used to filter `cohort_notes.parquet`; only cases are kept (`1`).
 
 ```bash
-python -m src.cli build-cohort \
-    --schema        CDMPHI \
-    --chunk-size    500 \
-    --min-note-date 2014-07-14 \
-    --no-debug
+python -m src.cli build-subset \
+    --notes-path          data/interim/airms/notes/all/cohort_notes.parquet \
+    --cohort-csv-path     data/interim/airms/mrsa_cohort_person_list.csv \
+    --selected-labels     "1" \
+    --out-dir             data/interim/airms/subset_notes \
+    --chunk-size          1
 ```
 
 | Option | Default | Description |
 |---|---|---|
-| `--schema` | `CDMPHI` | HANA schema |
-| `--chunk-size` | `500` | persons per HANA query |
-| `--min-note-date` | `2014-07-14` | earliest note date |
-| `--debug / --no-debug` | `--no-debug` | limit to debug sample |
-| `--debug-n-persons` | `20` | persons in debug mode |
+| `--notes-path` | `/sc/arion/projects/MRSA-HPI-MS/airms-app-host-and-hospital-adaptation-of-mrsa/mrsa_nlp/rule_based/data/interim/airms/notes/all/cohort_notes.parquet` | merged cohort notes |
+| `--person-ids-csv-path` / `--cohort-csv-path` | `None` | optional person-ID filter CSV |
+| `--selected-labels` | `"0,1"` / `"1"` | comma-separated labels to keep |
+| `--out-dir` | `data/interim/airms/notes` | output directory |
+| `--chunk-size` | `1` | rows per output parquet chunk |
 
 ### `preprocess`
 
