@@ -404,14 +404,13 @@ class RuleExtractor:
 
         preprocessed_chunks = self.list_preprocessed_chunks()
 
+        self.log.info("Starting extraction on %d pre-processed chunks.", len(preprocessed_chunks))
         for chunk_path in preprocessed_chunks:
             chunk_name = chunk_path.name
             out_path = out_dir / chunk_name
             if out_path.exists():
                 self.log.info("Skipping existing extraction chunk: %s", out_path)
                 continue
-            
-            self.log.info("Processing chunk: %s", chunk_path)
 
             try:
                 df_chunk = pd.read_parquet(chunk_path)

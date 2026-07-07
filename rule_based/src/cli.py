@@ -167,8 +167,13 @@ def preprocess(
         debug_n_notes=debug_n_notes,
     )
 
+    snapshot = {
+        k: str(v) if isinstance(v, Path) else v
+        for k, v in cfg.__dict__.items()
+    }
+
     save_config_snapshot(
-        cfg.__dict__ | {"pipeline_step": "preprocess"},
+        snapshot | {"pipeline_step": "preprocess"},
         run_dir=_current_run_dir(),
     )
 
@@ -223,8 +228,13 @@ def extract(
         debug_n_notes=debug_n_notes,
     )
 
+    snapshot = {
+        k: str(v) if isinstance(v, Path) else v
+        for k, v in ext_cfg.__dict__.items()
+    }
+
     save_config_snapshot(
-        ext_cfg.__dict__ | {"pipeline_step": "extract"},
+        snapshot | {"pipeline_step": "preprocess"},
         run_dir=_current_run_dir(),
     )
 
