@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import pandas as pd
 
@@ -124,6 +124,28 @@ class Lexicon:
         self.log = logger
         self._entries: Dict[str, LexiconEntry] = {}
 
+    def normalize(self, text: str) -> str:
+        """Normalize to lower_snake_case — for risk_factor keys and column names only."""
+        return text.strip().lower().replace(" ", "_")
+
+    def _split_cell(self, value, *, lowercase: bool = True) -> List[str]:
+        """Split a pipe-separated cell value into a stripped list; NaN-safe.
+
+        ICD-10 codes must be passed with ``lowercase=False`` to preserve their
+        canonical uppercase format (e.g. ``A49.01``).
+        """
+        if pd.isnull(value):
+            return []
+        tokens = [
+            stripped for x in str(value).split(self.cfg.separator)
+            if (stripped := x.strip().strip("\"'").strip())
+        ]
+        return [t.lower() for t in tokens] if lowercase else tokens
+
+    def _str_cell(self, value) -> str:
+        """Return a stripped string from a scalar cell value; NaN-safe."""
+        return "" if pd.isnull(value) else str(value).strip()
+
     def load(self) -> None:
         """
         Read the lexicon CSV and populate internal ``_entries`` dict.
@@ -149,7 +171,46 @@ class Lexicon:
         - Skip rows where risk_factor is empty.
         - Log the number of entries loaded and the list of risk factors.
         """
-        pass
+        lexicon_path = self.cfg.lexicon_path
+        if not lexicon_path.exists():
+            raise FileNotFoundError(f"Lexicon CSV not found: {lexicon_path}")
+        
+        self.log.info("Loading lexicon from %s", lexicon_path)
+        df = pd.read_csv(lexicon_path)
+        df.columns = [self.normalize(col) for col in df.columns]
+
+        required_cols = {"risk_factor", "medical_context", "icd_codes", "drug_names", "keywords", "abbreviations"}
+        missing = required_cols - set(df.columns)
+        if missing:
+            raise ValueError(f"Lexicon CSV is missing required columns: {missing}")
+
+        self._entries = {}
+        for _, row in df.iterrows():
+            if pd.isnull(row["risk_factor"]) or row["risk_factor"] == "":
+                continue
+            risk_factor = self.normalize(row["risk_factor"])
+            if risk_factor in self._entries:
+                self.log.warning("Duplicate risk factor '%s' in CSV — later row overwrites earlier.", risk_factor)
+            entry = LexiconEntry(
+                risk_factor=risk_factor,
+                medical_context=self._str_cell(row["medical_context"]),
+                icd_codes=self._split_cell(row["icd_codes"], lowercase=False),
+                drug_names=self._split_cell(row["drug_names"]),
+                keywords=self._split_cell(row["keywords"]),
+                abbreviations=self._split_cell(row["abbreviations"]),
+                negation_caveats=self._str_cell(row.get("negation_caveats")),
+            )
+            if self.cfg.debug:
+                self.log.debug(
+                    "Loaded entry '%s': %d keywords, %d drug names, %d ICD codes",
+                    risk_factor, len(entry.keywords), len(entry.drug_names), len(entry.icd_codes),
+                )
+            self._entries[risk_factor] = entry
+
+        self.log.info("Loaded %d lexicon entries: %s", len(self._entries), list(self._entries.keys()))
+        
+        if self.cfg.validate_on_load:
+            self.validate()
 
     def get_all_entries(self) -> List[LexiconEntry]:
         """
@@ -159,7 +220,7 @@ class Lexicon:
         -------
         list of LexiconEntry
         """
-        pass
+        return list(self._entries.values())
 
     def get_entry(self, risk_factor: str) -> LexiconEntry:
         """
@@ -179,7 +240,11 @@ class Lexicon:
         KeyError
             If risk_factor is not in the loaded entries.
         """
-        pass
+        entry = self._entries.get(risk_factor)
+        if entry is None:
+            raise KeyError(f"Risk factor '{risk_factor}' not found in lexicon.")
+
+        return entry
 
     def get_patterns_for_factor(self, risk_factor: str) -> List[str]:
         """
@@ -198,7 +263,8 @@ class Lexicon:
         list of str
             All non-empty pattern strings for this risk factor.
         """
-        pass
+        entry = self.get_entry(risk_factor)
+        return [p for p in entry.drug_names + entry.keywords + entry.abbreviations if p]
 
     def get_all_patterns(self) -> Dict[str, List[str]]:
         """
@@ -210,7 +276,7 @@ class Lexicon:
         dict of {str: list of str}
             Keys are risk factor names; values are pattern lists.
         """
-        pass
+        return {risk_factor: self.get_patterns_for_factor(risk_factor) for risk_factor in self._entries}
 
     def validate(self) -> bool:
         """
@@ -219,19 +285,27 @@ class Lexicon:
         Checks
         ------
         - Each entry has at least one keyword or drug_name.
-        - No duplicate risk_factor keys.
-        - All risk_factor names are lower_snake_case (warn if not).
+
+        Notes
+        -----
+        - Duplicate keys are detected in ``load()`` before the dict is built.
+        - The lower_snake_case check would always pass here because
+          ``normalize()`` is applied to every key on load.
+        - Log a WARNING for each problematic entry but do not raise.
 
         Returns
         -------
         bool
             True if all checks pass; False if any warnings were issued.
-
-        Notes
-        -----
-        - Log a WARNING for each problematic entry but do not raise.
         """
-        pass
+        warnings_issued = False
+        for risk_factor, entry in self._entries.items():
+            if not entry.keywords and not entry.drug_names:
+                self.log.warning(
+                    "Lexicon entry '%s' has no keywords or drug names.", risk_factor
+                )
+                warnings_issued = True
+        return not warnings_issued
 
     def to_dataframe(self) -> pd.DataFrame:
         """
@@ -244,4 +318,15 @@ class Lexicon:
             keywords, abbreviations, negation_caveats.
             List columns are stored as pipe-joined strings.
         """
-        pass
+        data = []
+        for entry in self._entries.values():
+            data.append({
+                "risk_factor": entry.risk_factor,
+                "medical_context": entry.medical_context,
+                "icd_codes": self.cfg.separator.join(entry.icd_codes),
+                "drug_names": self.cfg.separator.join(entry.drug_names),
+                "keywords": self.cfg.separator.join(entry.keywords),
+                "abbreviations": self.cfg.separator.join(entry.abbreviations),
+                "negation_caveats": entry.negation_caveats
+            })
+        return pd.DataFrame(data)
