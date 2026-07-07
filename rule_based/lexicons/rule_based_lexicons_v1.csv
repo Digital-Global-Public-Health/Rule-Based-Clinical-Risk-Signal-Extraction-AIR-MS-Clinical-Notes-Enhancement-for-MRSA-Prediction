@@ -1,4 +1,4 @@
-Risk Factor ;Medical Context ;ICDvCodes;Drug Names ;Keywords ;Abbreviations ;Negation Caveats;Reference
+Risk Factor ;Medical Context ;ICD Codes;Drug Names ;Keywords ;Abbreviations ;Negation Caveats;Reference
 Corticosteroid Use;Immune suppression;-;prednisone | methylprednisolone | dexamethasone;"""on steroids"" | ""steroid therapy"" | ""corticosteroid""";pred | meth | dex;exclude topical or inhaled only;
 ICU Stay;Critical Illness;-;-;"""intensive-care unit""";ICU;;
 Prior History of MRSA Colonization or Infection in the last 1 Year;Colonization / Infection History;Z22.322 | A49.02;vancomycin | teicoplanin | telavancin | ceftaroline | daptomycin | oxazolidinones;"""antibiotic"" | ""Firvanq"" | ""Vancocin"" | ""Glycopeptide antibacterial""";VA | VAN | TEC | TPN | TEI | TP | TPL;vancomycin is most common antibiotic in MRSA treatment | either alone or in combination (e.g. with chemotherapy);"https://www.mdpi.com/2079-6382/11/5/606; https://www.drugs.com/monograph/vancomycin.html; https://www.drugs.com/international/teicoplanin.html; https://microbiologie-clinique.com/antibiotic-family-abbreviation.html"

@@ -62,7 +62,7 @@ class LexiconEntry:
     drug_names: List[str] = field(default_factory=list)
     keywords: List[str] = field(default_factory=list)
     abbreviations: List[str] = field(default_factory=list)
-    negation_caveats: str = ""
+    negation_caveats: str = ""ValueError: Lexicon CSV is missing required columns: {'medical_context', 'keywords', 'icd_codes', 'abbreviations', 'drug_names', 'risk_factor'}
 
 
 # ---------------------------------------------------------------------------
@@ -78,6 +78,8 @@ class LexiconConfig:
     ----------
     lexicon_path : Path
         Path to the lexicon CSV file.
+    csv_separator : str
+        Column delimiter of the CSV file (default ";").
     separator : str
         Delimiter used inside multi-value cells (default "|").
     validate_on_load : bool
@@ -87,6 +89,7 @@ class LexiconConfig:
     """
 
     lexicon_path: Path = Path("lexicons/mrsa_risk_factors_v1.csv")
+    csv_separator: str = ";"
     separator: str = "|"
     validate_on_load: bool = True
     debug: bool = False
@@ -176,7 +179,7 @@ class Lexicon:
             raise FileNotFoundError(f"Lexicon CSV not found: {lexicon_path}")
         
         self.log.info("Loading lexicon from %s", lexicon_path)
-        df = pd.read_csv(lexicon_path)
+        df = pd.read_csv(lexicon_path, sep=self.cfg.csv_separator, encoding="utf-8-sig")
         df.columns = [self.normalize(col) for col in df.columns]
 
         required_cols = {"risk_factor", "medical_context", "icd_codes", "drug_names", "keywords", "abbreviations"}
