@@ -102,7 +102,7 @@ class NegationHandler:
     >>> from src.extraction.negation_handler import NegationConfig, NegationHandler
     >>> handler = NegationHandler(NegationConfig())
     >>> text = "The patient has no prior MRSA colonization."
-    >>> is_neg = handler.is_negated(text, match_start=26, match_end=41)
+    >>> is_neg = handler.is_negated(text, match_start=25, match_end=42)
     >>> assert is_neg  # should be True
     """
 
@@ -133,7 +133,13 @@ class NegationHandler:
           already span multiple tokens).
         - Results stored in self._compiled_cues.
         """
-        pass
+        for cue in self.cfg.negation_cues:
+            pattern_str = r"\b" + re.escape(cue) + r"\b"
+            try:
+                compiled = re.compile(pattern_str, re.IGNORECASE)
+                self._compiled_cues.append(compiled)
+            except re.error as e:
+                self.log.warning("Failed to compile negation cue '%s': %s", cue, e)
 
     # ------------------------------------------------------------------
     # Core detection
@@ -171,7 +177,14 @@ class NegationHandler:
         4. Take the last ``cfg.window_tokens`` tokens.
         5. Rejoin with spaces and return.
         """
-        pass
+        substring = text[:match_start]
+        if self.cfg.use_sentence_boundary:
+            last_boundary = max(substring.rfind("."), substring.rfind("!"), substring.rfind("?"), substring.rfind("\n"))
+            if last_boundary != -1:
+                substring = substring[last_boundary + 1 :]
+        
+        tokens = substring.split()
+        return " ".join(tokens[-self.cfg.window_tokens:])
 
     def is_negated(
         self,
@@ -205,7 +218,17 @@ class NegationHandler:
         - Checks each compiled cue pattern against the window text.
         - If cfg.debug is True, log the window and which cue triggered.
         """
-        pass
+        pre_window = self._get_pre_window_text(text, match_start)
+        for cue_pattern in self._compiled_cues:
+            if cue_pattern.search(pre_window):
+                if self.cfg.debug:
+                    self.log.debug(
+                        "Negation detected: cue '%s' found in window '%s'",
+                        cue_pattern.pattern,
+                        pre_window,
+                    )
+                return True
+        return False
 
     def filter_negated(
         self,
@@ -233,4 +256,8 @@ class NegationHandler:
         - Calls is_negated() for each match.
         - Logs how many matches were suppressed when cfg.debug is True.
         """
-        pass
+        filtered_matches = [m for m in matches if not self.is_negated(text, m[0], m[1])]
+        if self.cfg.debug:
+            num_removed = len(matches) - len(filtered_matches)
+            self.log.debug("Negation filtering: %d of %d matches removed.", num_removed, len(matches))
+        return filtered_matches
