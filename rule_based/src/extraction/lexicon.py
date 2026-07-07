@@ -62,7 +62,7 @@ class LexiconEntry:
     drug_names: List[str] = field(default_factory=list)
     keywords: List[str] = field(default_factory=list)
     abbreviations: List[str] = field(default_factory=list)
-    negation_caveats: str = ""ValueError: Lexicon CSV is missing required columns: {'medical_context', 'keywords', 'icd_codes', 'abbreviations', 'drug_names', 'risk_factor'}
+    negation_caveats: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -141,13 +141,16 @@ class Lexicon:
             return []
         tokens = [
             stripped for x in str(value).split(self.cfg.separator)
-            if (stripped := x.strip().strip("\"'").strip())
+            if (stripped := x.strip().strip("\"'").strip()) and stripped != "-"
         ]
         return [t.lower() for t in tokens] if lowercase else tokens
 
     def _str_cell(self, value) -> str:
         """Return a stripped string from a scalar cell value; NaN-safe."""
-        return "" if pd.isnull(value) else str(value).strip()
+        if pd.isnull(value):
+            return ""
+        stripped = str(value).strip()
+        return "" if stripped == "-" else stripped
 
     def load(self) -> None:
         """
