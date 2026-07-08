@@ -37,7 +37,7 @@ by `mrsa_risk_predictions`.
 └────────────────────────┬────────────────────────────────────────┘
                          │
                          ▼
-          data/interim/airms/subset_notes/
+          data/interim/airms/notes/
             chunk_0000.parquet
             chunk_0001.parquet
             …
@@ -83,13 +83,13 @@ by `mrsa_risk_predictions`.
             …                     | has_prior_mrsa | count_prior_mrsa | …)
                          │
                          ▼
-┌─────────────────────────────────────────────────────────────────┐
+┌────────────────────────────────────────────────────────────────┐
 │  STEP 4 · Feature Aggregator  (src/features/feature_aggregator.py) │
 │                                                                 │
 │  · Aggregate per-note → visit level                             │
 │      has_*   : MAX  (1 if any note in visit has the signal)     │
 │      count_* : SUM  (total matches across notes in visit)       │
-│  · Left-join with mrsa_cohort_person_list (adds LABEL + MRN)    │
+│  · Left-join with mrsa_cohort_person_list (adds LABEL + PERSON_ID)  │
 │  · Fill missing features with 0                                 │
 │  · Log case / control counts for verification                   │
 └────────────────────────┬────────────────────────────────────────┘
@@ -261,7 +261,7 @@ python -m src.cli build-subset \
     --cohort-csv-path     /sc/arion/projects/MRSA-HPI-MS/airms-app-host-and-hospital-adaptation-of-mrsa/
                             mrsa_nlp/rule_based/data/interim/airms/mrsa_cohort_person_list.csv \
     --selected-labels     "1" \
-    --out-dir             data/interim/airms/subset_notes \
+    --out-dir             data/interim/airms/notes \
     --chunk-size          1
 ```
 
@@ -399,8 +399,7 @@ outputs/
 `data/interim/airms/` (persistent, not inside outputs):
 
 ```
-mrsa_cohort_person_list.parquet   ← PERSON_ID | MRN | LABEL
-mrsa_cohort_person_list.csv       ← same, for quick inspection
+mrsa_cohort_person_list.csv         ← PERSON_ID | LABEL
 notes/            chunk_0000.parquet … (raw, from HANA)
 notes_preprocessed/ chunk_0000.parquet … (cleaned)
 extractions/      chunk_0000.parquet … (per-note features)

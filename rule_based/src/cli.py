@@ -254,7 +254,7 @@ def aggregate_features(
         help="Directory of extraction chunk Parquet files.",
     ),
     cohort_path: Path = typer.Option(
-        Path("data/interim/airms/mrsa_cohort_person_list.parquet"),
+        Path("data/interim/airms/mrsa_cohort_person_list.csv"),
         help="Cohort person list (PERSON_ID, MRN, LABEL).",
     ),
     level: str = typer.Option("visit", help="Aggregation level: 'visit' or 'person'."),
