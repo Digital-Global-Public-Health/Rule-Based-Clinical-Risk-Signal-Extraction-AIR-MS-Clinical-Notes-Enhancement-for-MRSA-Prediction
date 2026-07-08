@@ -276,7 +276,15 @@ def aggregate_features(
         debug=debug,
     )
 
-    save_config_snapshot(cfg.__dict__ | {"pipeline_step": "aggregate_features"}, run_dir)
+    snapshot = {
+        k: str(v) if isinstance(v, Path) else v
+        for k, v in cfg.__dict__.items()
+    }
+
+    save_config_snapshot(
+        snapshot | {"pipeline_step": "aggregate_features"},
+        run_dir
+    )
 
     agg = FeatureAggregator(cfg, run_dir)
     feature_df = agg.run()
