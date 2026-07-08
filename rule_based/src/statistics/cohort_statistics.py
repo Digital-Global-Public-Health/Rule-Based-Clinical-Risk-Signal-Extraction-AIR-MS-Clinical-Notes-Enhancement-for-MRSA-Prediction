@@ -17,6 +17,8 @@ from rich.console import Console
 from rich.table import Table
 from wordcloud import WordCloud
 
+from rule_based.src.utils_io import ensure_dir
+
 
 LOG = logging.getLogger("mrsa_nlp.rule.statistics")
 
@@ -203,7 +205,7 @@ class CohortStatistics:
             Target path for the CSV file.
         """
         output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_dir(output_path.parent)
 
         summary_df = pd.DataFrame(
             {

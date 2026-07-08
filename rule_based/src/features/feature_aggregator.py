@@ -22,6 +22,8 @@ from typing import Dict, List, Tuple
 
 import pandas as pd
 
+from rule_based.src.utils_io import read_parquet, write_parquet
+
 LOG = logging.getLogger("mrsa_nlp.rule.features")
 
 
@@ -175,7 +177,7 @@ class FeatureAggregator:
                 break
 
             self.log.debug(f"Loading chunk file: {chunk_file}")
-            df_chunk = pd.read_parquet(chunk_file)
+            df_chunk = read_parquet(chunk_file)
 
             if debug_limit is not None:
                 remaining = debug_limit - total_rows
@@ -497,7 +499,7 @@ class FeatureAggregator:
         summary_json_path = self.run_dir / f"feature_summary_{timestamp}.json"
 
         feature_df.to_csv(feature_csv_path, index=False)
-        feature_df.to_parquet(feature_parquet_path, index=False)
+        write_parquet(feature_df, feature_parquet_path)
         with open(summary_json_path, "w") as f:
             json.dump(summary, f, indent=4)
 

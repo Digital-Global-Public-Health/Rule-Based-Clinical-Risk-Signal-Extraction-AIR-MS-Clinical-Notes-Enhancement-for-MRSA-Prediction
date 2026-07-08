@@ -12,6 +12,8 @@ import logging
 
 import pandas as pd
 
+from rule_based.src.utils_io import ensure_dir, read_parquet, write_parquet
+
 
 LOG = logging.getLogger("mrsa_nlp.rule.cohort.subset")
 
@@ -85,7 +87,7 @@ class SubsetBuilder:
             raise FileNotFoundError(f"MRSA cohort notes file not found: {cohort_path}")
 
         self.log.info("Loading MRSA cohort notes from %s", cohort_path)
-        self.cohort_df = pd.read_parquet(cohort_path)
+        self.cohort_df = read_parquet(cohort_path)
         self.log.info("Loaded %d notes from the MRSA cohort.", len(self.cohort_df))
 
 
@@ -206,7 +208,7 @@ class SubsetBuilder:
                     "output_path must point to a directory, not a file: %s" % out_path
                 )
 
-            out_path.mkdir(parents=True, exist_ok=True)
+            ensure_dir(out_path)
 
             chunk_size = max(1, self.cfg.chunk_size)
             n_rows = len(self.subset_df)
@@ -217,7 +219,7 @@ class SubsetBuilder:
                     chunk_index * chunk_size : (chunk_index + 1) * chunk_size
                 ]
                 chunk_path = out_path / f"chunk_{chunk_index:04d}.parquet"
-                chunk.to_parquet(chunk_path, index=False)
+                write_parquet(chunk, chunk_path)
 
             self.log.info(
                 "Saved %d filtered notes as %d chunked parquet file(s) to %s",

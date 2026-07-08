@@ -22,6 +22,8 @@ from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from rule_based.src.utils_io import ensure_dir, read_parquet, write_parquet
+
 LOG = logging.getLogger("mrsa_nlp.rule.extractor")
 
 
@@ -400,7 +402,7 @@ class RuleExtractor:
         total_matches: Dict[str, int] = {e.risk_factor: 0 for e in self.lexicon.get_all_entries()}
 
         out_dir = self.cfg.out_dir
-        out_dir.mkdir(parents=True, exist_ok=True)
+        ensure_dir(out_dir)
 
         preprocessed_chunks = self.list_preprocessed_chunks()
 
@@ -413,7 +415,7 @@ class RuleExtractor:
                 continue
 
             try:
-                df_chunk = pd.read_parquet(chunk_path)
+                df_chunk = read_parquet(chunk_path)
             except Exception as e:
                 self.log.error("Failed to read chunk %s: %s", chunk_path, e)
                 continue
@@ -440,7 +442,7 @@ class RuleExtractor:
                     total_matches[rf] += int(df_result[col].sum())
 
             try:
-                df_result.to_parquet(out_path, index=False)
+                write_parquet(df_result, out_path)
             except Exception as e:
                 self.log.error("Failed to save results for chunk %s: %s", chunk_path, e)
                 continue

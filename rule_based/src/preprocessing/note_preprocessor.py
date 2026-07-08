@@ -22,6 +22,8 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 import pandas as pd
 
+from rule_based.src.utils_io import ensure_dir, read_parquet, write_parquet
+
 LOG = logging.getLogger("mrsa_nlp.rule.preprocess")
 
 
@@ -205,7 +207,7 @@ class NotePreprocessor:
             VISIT_OCCURRENCE_ID.
         """
         try:
-            df = pd.read_parquet(chunk_path)
+            df = read_parquet(chunk_path)
         except Exception:
             self.log.exception(f"Error loading chunk file {chunk_path}.")
             raise
@@ -494,7 +496,7 @@ class NotePreprocessor:
         - Use tqdm for a progress bar.
         """
         out_dir = self.cfg.out_dir
-        out_dir.mkdir(parents=True, exist_ok=True)
+        ensure_dir(out_dir)
 
         try:
             chunk_files = self.list_chunk_files()
@@ -542,7 +544,7 @@ class NotePreprocessor:
                     continue
 
                 try:
-                    df_processed.to_parquet(out_file, index=False)
+                    write_parquet(df_processed, out_file)
                 except Exception:
                     self.log.exception(f"Failed to write processed chunk to {out_file}; skipping.")
                     continue
