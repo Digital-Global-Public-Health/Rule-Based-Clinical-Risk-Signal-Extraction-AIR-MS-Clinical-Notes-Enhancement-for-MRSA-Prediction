@@ -301,7 +301,7 @@ python -m src.cli extract \
 ```bash
 python -m src.cli aggregate-features \
     --extractions-dir data/interim/airms/extractions \
-    --cohort-path     data/interim/airms/mrsa_cohort_person_list.parquet \
+    --cohort-path     data/interim/airms/mrsa_cohort_person_list.csv \
     --level           visit \
     --no-debug
 ```
