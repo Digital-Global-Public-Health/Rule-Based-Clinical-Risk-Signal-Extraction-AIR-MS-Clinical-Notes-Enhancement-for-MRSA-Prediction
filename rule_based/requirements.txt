@@ -1,5 +1,4 @@
 dotenv==0.9.9
-hdbcli==2.28.22
 ipykernel==7.3.0
 ipython==8.39.0
 matplotlib==3.10.9
