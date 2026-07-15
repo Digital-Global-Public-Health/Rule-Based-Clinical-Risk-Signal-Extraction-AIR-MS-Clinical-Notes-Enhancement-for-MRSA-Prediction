@@ -9,6 +9,8 @@ from pathlib import Path
 from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
+from rule_based.src.utils_io import ensure_dir
+
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*pandas.*')
 logger = logging.getLogger("mrsa_nlp.rule")
 
@@ -60,7 +62,7 @@ def configure_logging(
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     run_dir = base_dir / f"{run_name}_{timestamp}"
-    run_dir.mkdir(parents=True, exist_ok=True)
+    ensure_dir(run_dir)
 
     log_path = run_dir / "run.log"
     numeric = getattr(logging, level.upper(), logging.INFO)
@@ -106,7 +108,7 @@ def make_run_dir(
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     run_id = f"{prefix}_{ts}"
     run_dir = base_dir / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
+    ensure_dir(run_dir)
     return run_id, run_dir
 
 
