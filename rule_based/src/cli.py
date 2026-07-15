@@ -318,7 +318,6 @@ def evaluate(
     cfg = EvaluatorConfig(
         features_path=features_path,
         gold_standard_path=gold_standard_path,
-        out_dir=run_dir / "evaluation",
         target_precision=target_precision,
         target_recall=target_recall,
         debug=debug,
