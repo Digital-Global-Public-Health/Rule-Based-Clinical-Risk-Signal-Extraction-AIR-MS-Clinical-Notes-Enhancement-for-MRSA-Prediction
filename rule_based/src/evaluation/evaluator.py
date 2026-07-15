@@ -27,7 +27,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from rule_based.src.utils_io import ensure_dir
+from src.utils_io import ensure_dir
 
 LOG = logging.getLogger("mrsa_nlp.rule.evaluation")
 

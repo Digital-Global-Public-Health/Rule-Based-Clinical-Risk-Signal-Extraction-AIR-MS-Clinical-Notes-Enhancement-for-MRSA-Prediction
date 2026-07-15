@@ -22,7 +22,7 @@ from typing import Dict, List, Tuple
 
 import pandas as pd
 
-from rule_based.src.utils_io import read_parquet, write_parquet
+from src.utils_io import read_parquet, write_parquet
 
 LOG = logging.getLogger("mrsa_nlp.rule.features")
 

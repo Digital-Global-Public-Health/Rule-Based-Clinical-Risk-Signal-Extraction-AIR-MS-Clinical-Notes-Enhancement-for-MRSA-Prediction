@@ -9,7 +9,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
-from rule_based.src.utils_io import ensure_dir
+from src.utils_io import ensure_dir
 
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*pandas.*')
 logger = logging.getLogger("mrsa_nlp.rule")

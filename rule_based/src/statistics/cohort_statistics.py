@@ -17,7 +17,7 @@ from rich.console import Console
 from rich.table import Table
 from wordcloud import WordCloud
 
-from rule_based.src.utils_io import ensure_dir
+from src.utils_io import ensure_dir
 
 
 LOG = logging.getLogger("mrsa_nlp.rule.statistics")
