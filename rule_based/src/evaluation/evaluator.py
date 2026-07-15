@@ -32,6 +32,15 @@ from src.utils_io import ensure_dir
 LOG = logging.getLogger("mrsa_nlp.rule.evaluation")
 
 
+def _short_label(risk_factor: pd.Series) -> pd.Series:
+    """Strip the has_ prefix and turn underscores/hyphens into spaces for plot ticks."""
+    return (
+        risk_factor.str.replace("^has_", "", regex=True)
+        .str.replace("_", " ", regex=False)
+        .str.replace("-", " ", regex=False)
+    )
+
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -396,12 +405,18 @@ class RuleEvaluator:
         - x-axis: risk factor names (short labels).
         - y-axis: proportion of records with feature = 1.
         - Use seaborn style; save at cfg.plot_dpi DPI.
+        - Figure width and label rotation scale with the number of factors
+          so long risk-factor names do not overlap.
         """
         out_path = self.eval_dir / "feature_prevalence.png"
-        fig, ax = plt.subplots(figsize=(10, 6))
+        plot_df = prevalence_df.copy()
+        plot_df["label"] = _short_label(plot_df["risk_factor"])
+
+        n_factors = plot_df["risk_factor"].nunique()
+        fig, ax = plt.subplots(figsize=(max(10, 0.55 * n_factors), 6))
         sns.barplot(
-            data=prevalence_df.melt(id_vars="risk_factor", value_vars=["prevalence_cases", "prevalence_controls"]),
-            x="risk_factor",
+            data=plot_df.melt(id_vars="label", value_vars=["prevalence_cases", "prevalence_controls"]),
+            x="label",
             y="value",
             hue="variable",
             ax=ax,
@@ -410,7 +425,7 @@ class RuleEvaluator:
         ax.set_ylabel("Prevalence (Proportion)")
         ax.set_title("Feature Prevalence by LABEL (Cases vs Controls)")
         ax.legend(title="")
-        plt.xticks(rotation=45, ha="right")
+        plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor", fontsize=8)
         plt.tight_layout()
         plt.savefig(out_path, dpi=self.cfg.plot_dpi, bbox_inches="tight")
         plt.close(fig)
@@ -439,14 +454,20 @@ class RuleEvaluator:
         - Grouped bars per risk factor: precision / recall / F1.
         - Vertical dashed lines at cfg.target_precision and
           cfg.target_recall.
+        - Figure height scales with the number of factors so long
+          risk-factor names on the y-axis do not overlap.
         """
         out_path = self.eval_dir / "metrics_by_factor.png"
-        fig, ax = plt.subplots(figsize=(10, 6))
-        metrics_melted = metrics_df.melt(id_vars="risk_factor", value_vars=["precision", "recall", "f1"])
+        plot_df = metrics_df.copy()
+        plot_df["label"] = _short_label(plot_df["risk_factor"])
+
+        n_factors = plot_df["risk_factor"].nunique()
+        fig, ax = plt.subplots(figsize=(10, max(6, 0.45 * n_factors)))
+        metrics_melted = plot_df.melt(id_vars="label", value_vars=["precision", "recall", "f1"])
         sns.barplot(
             data=metrics_melted,
             x="value",
-            y="risk_factor",
+            y="label",
             hue="variable",
             ax=ax,
         )
@@ -456,6 +477,7 @@ class RuleEvaluator:
         ax.set_ylabel("Risk Factor")
         ax.set_title("Precision, Recall, F1 by Risk Factor")
         ax.legend(title="")
+        ax.tick_params(axis="y", labelsize=8)
         plt.tight_layout()
         plt.savefig(out_path, dpi=self.cfg.plot_dpi, bbox_inches="tight")
         plt.close(fig)
@@ -581,9 +603,9 @@ class RuleEvaluator:
                 if examples.empty:
                     f.write("- No rows with a positive feature found.\n")
                 else:
-                    for row in examples.itertuples():
-                        fired = [c for c in binary_cols if getattr(row, c) == 1]
-                        f.write(f"- {id_col}={getattr(row, id_col)}: {', '.join(fired)}\n")
+                    for _, row in examples.iterrows():
+                        fired = [c for c in binary_cols if row[c] == 1]
+                        f.write(f"- {id_col}={row[id_col]}: {', '.join(fired)}\n")
             else:
                 f.write("- Skipped: no ID column or has_* features found.\n")
 
