@@ -323,7 +323,15 @@ def evaluate(
         debug=debug,
     )
 
-    save_config_snapshot(cfg.__dict__ | {"pipeline_step": "evaluate"}, run_dir)
+    snapshot = {
+        k: str(v) if isinstance(v, Path) else v
+        for k, v in cfg.__dict__.items()
+    }
+
+    save_config_snapshot(
+        snapshot | {"pipeline_step": "evaluate"},
+        run_dir
+    )
 
     evaluator = RuleEvaluator(cfg, run_dir)
     evaluator.run()
