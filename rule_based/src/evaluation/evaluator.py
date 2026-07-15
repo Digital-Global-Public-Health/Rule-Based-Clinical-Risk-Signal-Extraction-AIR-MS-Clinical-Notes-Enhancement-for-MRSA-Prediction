@@ -228,11 +228,22 @@ class RuleEvaluator:
         Returns
         -------
         Tuple[float, float, float]
-            (precision, recall, f1).  Zero-division returns 0.0.
+            (precision, recall, f1).
+
+        Notes
+        -----
+        - precision is NaN when the rule made no positive predictions
+          (TP + FP == 0) — there is nothing to be precise about.
+        - recall is NaN when the gold standard has no actual positives
+          (TP + FN == 0) — there is nothing to recall.
+        - f1 is computed as 2*TP / (2*TP + FP + FN), which is 0.0 whenever
+          FP or FN is nonzero (a real miss/false alarm) and only NaN in the
+          fully vacuous case TP == FP == FN == 0 (not evaluable at all).
         """
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+        precision = tp / (tp + fp) if (tp + fp) > 0 else float("nan")
+        recall = tp / (tp + fn) if (tp + fn) > 0 else float("nan")
+        f1_denom = 2 * tp + fp + fn
+        f1 = (2 * tp) / f1_denom if f1_denom > 0 else float("nan")
         return precision, recall, f1
 
     def evaluate_by_factor(
@@ -255,6 +266,8 @@ class RuleEvaluator:
         pd.DataFrame
             Columns: risk_factor, TP, FP, FN, TN, precision, recall, f1,
             meets_precision_target, meets_recall_target.
+            meets_*_target is None ("N/A") wherever the corresponding
+            metric is NaN (not evaluable — see compute_prf1).
             Sorted by F1 descending.
 
         Notes
@@ -313,8 +326,12 @@ class RuleEvaluator:
                 "precision": precision,
                 "recall": recall,
                 "f1": f1,
-                "meets_precision_target": precision >= self.cfg.target_precision,
-                "meets_recall_target": recall >= self.cfg.target_recall,
+                "meets_precision_target": (
+                    precision >= self.cfg.target_precision if pd.notna(precision) else None
+                ),
+                "meets_recall_target": (
+                    recall >= self.cfg.target_recall if pd.notna(recall) else None
+                ),
             })
         metrics_df = pd.DataFrame(metrics_list)
         metrics_df.sort_values(by="f1", ascending=False, inplace=True)
@@ -564,14 +581,27 @@ class RuleEvaluator:
                 f.write("Precision/Recall Metrics:\n")
                 f.write(metrics_df.to_string(index=False))
                 f.write("\n\n")
-                failed_precision = metrics_df[~metrics_df["meets_precision_target"]]
-                failed_recall = metrics_df[~metrics_df["meets_recall_target"]]
+                # meets_*_target is None ("N/A") wherever the metric was undefined
+                # (0/0 — no positive predictions and/or no actual positives); treat
+                # that as "not evaluable", not as a failure.
+                failed_precision = metrics_df[metrics_df["meets_precision_target"] == False]  # noqa: E712
+                failed_recall = metrics_df[metrics_df["meets_recall_target"] == False]  # noqa: E712
+                na_precision = metrics_df[metrics_df["meets_precision_target"].isna()]
+                na_recall = metrics_df[metrics_df["meets_recall_target"].isna()]
                 f.write(f"Rules failing precision target ({self.cfg.target_precision}):\n")
                 f.write(failed_precision[["risk_factor", "precision"]].to_string(index=False))
                 f.write("\n\n")
                 f.write(f"Rules failing recall target ({self.cfg.target_recall}):\n")
                 f.write(failed_recall[["risk_factor", "recall"]].to_string(index=False))
                 f.write("\n\n")
+                if not na_precision.empty or not na_recall.empty:
+                    f.write(
+                        "Not evaluable (no positive predictions and/or no actual "
+                        "positives in the gold sample for this factor):\n"
+                    )
+                    na_factors = sorted(set(na_precision["risk_factor"]) | set(na_recall["risk_factor"]))
+                    f.write("\n".join(f"- {factor}" for factor in na_factors))
+                    f.write("\n\n")
                 f.write("Recommendations:\n")
                 if failed_precision.empty and failed_recall.empty:
                     f.write("- All rules meet their precision/recall targets.\n")
@@ -651,7 +681,12 @@ class RuleEvaluator:
         self.generate_validation_report(features_df, metrics_df, prevalence_df)
 
         if metrics_df is not None:
-            n_pass = int((metrics_df["meets_precision_target"] & metrics_df["meets_recall_target"]).sum())
-            self.log.info(f"Pass/fail summary: {n_pass}/{len(metrics_df)} rules meet both targets.")
+            evaluable = metrics_df["meets_precision_target"].notna() & metrics_df["meets_recall_target"].notna()
+            n_pass = int(
+                (metrics_df.loc[evaluable, "meets_precision_target"] & metrics_df.loc[evaluable, "meets_recall_target"]).sum()
+            )
+            n_na = int((~evaluable).sum())
+            na_note = f" ({n_na} not evaluable, excluded)" if n_na else ""
+            self.log.info(f"Pass/fail summary: {n_pass}/{int(evaluable.sum())} evaluable rules meet both targets{na_note}.")
 
         self.log.debug(f"Evaluation complete. Outputs saved to: {self.eval_dir}")
