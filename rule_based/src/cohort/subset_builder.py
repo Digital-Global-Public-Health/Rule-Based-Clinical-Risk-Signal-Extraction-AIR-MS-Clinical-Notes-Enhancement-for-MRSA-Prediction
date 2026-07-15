@@ -245,4 +245,5 @@ class SubsetBuilder:
         self.load_cohort_notes()
         self.select_subset()
         self.save_subset()
+        self.log.debug("Subset selection process completed successfully.")
         return self.subset_df

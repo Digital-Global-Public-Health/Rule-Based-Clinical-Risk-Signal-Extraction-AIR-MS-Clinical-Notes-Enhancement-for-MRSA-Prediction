@@ -541,4 +541,5 @@ class FeatureAggregator:
         summary = self.compute_feature_summary(final_df)
         timestamp = pd.Timestamp.now().strftime("%Y%m%d-%H%M%S")
         self.export(final_df, summary, timestamp)
+        self.log.debug("Feature aggregation pipeline completed successfully.")
         return final_df

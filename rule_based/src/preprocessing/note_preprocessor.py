@@ -513,12 +513,12 @@ class NotePreprocessor:
         with logging_redirect_tqdm():
             for chunk_file in tqdm(chunk_files, desc="Processing chunks"):
                 if debug_limit is not None and total_in >= debug_limit:
-                    self.log.info(f"Debug limit reached ({debug_limit} notes); stopping early.")
+                    self.log.debug(f"Debug limit reached ({debug_limit} notes); stopping early.")
                     break
 
                 out_file = out_dir / chunk_file.name
                 if out_file.exists():
-                    self.log.info(f"Preprocessed chunk already exists, skipping: {out_file}")
+                    self.log.debug(f"Preprocessed chunk already exists, skipping: {out_file}")
                     continue
 
                 try:
@@ -530,7 +530,7 @@ class NotePreprocessor:
                 if debug_limit is not None:
                     remaining = debug_limit - total_in
                     if remaining <= 0:
-                        self.log.info(f"Debug limit reached ({debug_limit} notes); stopping early.")
+                        self.log.debug(f"Debug limit reached ({debug_limit} notes); stopping early.")
                         break
                     if len(df_raw) > remaining:
                         df_raw = df_raw.iloc[:remaining].copy()
@@ -551,6 +551,6 @@ class NotePreprocessor:
 
                 total_out += len(df_processed)
                 processed_chunks += 1
-                self.log.info(f"Processed {chunk_file.name}.")
+                self.log.debug(f"Processed {chunk_file.name}.")
 
-            self.log.info(f"Preprocessing complete. Chunks processed: {processed_chunks}. Notes in: {total_in}. Notes out: {total_out}.")
+            self.log.debug(f"Preprocessing complete. Chunks processed: {processed_chunks}. Notes in: {total_in}. Notes out: {total_out}.")

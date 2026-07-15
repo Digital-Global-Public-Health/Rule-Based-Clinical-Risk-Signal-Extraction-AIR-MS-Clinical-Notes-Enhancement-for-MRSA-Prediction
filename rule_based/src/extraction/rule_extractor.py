@@ -406,12 +406,12 @@ class RuleExtractor:
 
         preprocessed_chunks = self.list_preprocessed_chunks()
 
-        self.log.info("Starting extraction on %d pre-processed chunks.", len(preprocessed_chunks))
+        self.log.debug("Starting extraction on %d pre-processed chunks.", len(preprocessed_chunks))
         for chunk_path in preprocessed_chunks:
             chunk_name = chunk_path.name
             out_path = out_dir / chunk_name
             if out_path.exists():
-                self.log.info("Skipping existing extraction chunk: %s", out_path)
+                self.log.debug("Skipping existing extraction chunk: %s", out_path)
                 continue
 
             try:
@@ -423,7 +423,7 @@ class RuleExtractor:
             if debug_limit is not None:
                 remaining = debug_limit - total_in
                 if remaining <= 0:
-                    self.log.info("Debug limit reached (%d rows); stopping early.", debug_limit)
+                    self.log.debug("Debug limit reached (%d rows); stopping early.", debug_limit)
                     break
                 if len(df_chunk) > remaining:
                     df_chunk = df_chunk.iloc[:remaining].copy()
@@ -447,7 +447,7 @@ class RuleExtractor:
                 self.log.error("Failed to save results for chunk %s: %s", chunk_path, e)
                 continue
             
-            self.log.info("Saved extraction of %d row(s) to: %s", len(df_result), out_path)
+            self.log.debug("Saved extraction of %d row(s) to: %s", len(df_result), out_path)
         
         self.log.info("Extraction complete. Total notes processed: %d", total_in)
         self.log.info("%-40s %8s", "Risk Factor", "Positives")

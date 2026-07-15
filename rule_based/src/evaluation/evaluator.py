@@ -654,4 +654,4 @@ class RuleEvaluator:
             n_pass = int((metrics_df["meets_precision_target"] & metrics_df["meets_recall_target"]).sum())
             self.log.info(f"Pass/fail summary: {n_pass}/{len(metrics_df)} rules meet both targets.")
 
-        self.log.info(f"Evaluation complete. Outputs saved to: {self.eval_dir}")
+        self.log.debug(f"Evaluation complete. Outputs saved to: {self.eval_dir}")
