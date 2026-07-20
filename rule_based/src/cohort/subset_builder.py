@@ -102,22 +102,21 @@ class SubsetBuilder:
     def __init__(self, config: SubsetConfig, logger: logging.Logger = LOG) -> None:
         self.cfg = config
         self.log = logger
-        self.cohort_df = None
-        self.subset_df = None
 
     # -----------------------------------------------------------------------
     # load mrsa cohort notes
     # -----------------------------------------------------------------------
 
-    def load_cohort_notes(self):
+    def load_cohort_notes(self) -> pd.DataFrame:
         """Load the MRSA cohort notes from the configured path."""
         cohort_path = Path(self.cfg.mrsa_cohort_notes_path)
         if not cohort_path.exists():
             raise FileNotFoundError(f"MRSA cohort notes file not found: {cohort_path}")
 
         self.log.info("Loading MRSA cohort notes from %s", cohort_path)
-        self.cohort_df = read_parquet(cohort_path)
-        self.log.info("Loaded %d notes from the MRSA cohort.", len(self.cohort_df))
+        df = read_parquet(cohort_path)
+        self.log.info("Loaded %d notes from the MRSA cohort.", len(df))
+        return df
 
 
     @staticmethod
@@ -183,29 +182,27 @@ class SubsetBuilder:
     # select subset by person ID and note title
     # -----------------------------------------------------------------------
 
-    def select_subset(self):
+    def select_subset(self, cohort_df: pd.DataFrame) -> pd.DataFrame:
         """
         Loads the MRSA cohort notes and applies filters based on person IDs and note titles.
 
         """
-        if self.cohort_df is None or self.cohort_df.empty:
+        if cohort_df is None or cohort_df.empty:
             raise ValueError("Cohort not loaded or empty. Please run load_cohort_notes() first.")
-
-        working_df = self.cohort_df.copy()
 
         allowed_person_ids = self._load_person_ids()
         if allowed_person_ids:
-            if self.cfg.person_id_column not in working_df.columns:
+            if self.cfg.person_id_column not in cohort_df.columns:
                 raise ValueError(
                     f"Missing required column in cohort dataframe: {self.cfg.person_id_column}"
                 )
-            normalized_patient_ids = working_df[self.cfg.person_id_column].map(
+            normalized_patient_ids = cohort_df[self.cfg.person_id_column].map(
                 self._normalize_patient_id
             )
-            working_df = working_df[normalized_patient_ids.isin(allowed_person_ids)]
+            cohort_df = cohort_df[normalized_patient_ids.isin(allowed_person_ids)]
 
         if self.cfg.selected_note_titles:
-            if self.cfg.note_title_column not in working_df.columns:
+            if self.cfg.note_title_column not in cohort_df.columns:
                 raise ValueError(
                     f"Missing required column: {self.cfg.note_title_column}"
                 )
@@ -213,37 +210,38 @@ class SubsetBuilder:
             allowed_titles = {
                 title.strip().lower() for title in self.cfg.selected_note_titles
             }
-            working_df = working_df[
-                working_df[self.cfg.note_title_column]
+            cohort_df = cohort_df[
+                cohort_df[self.cfg.note_title_column]
                 .astype(str)
                 .str.strip()
                 .str.lower()
                 .isin(allowed_titles)
             ]
 
-        self.subset_df = working_df.reset_index(drop=True)
+        subset_df = cohort_df.reset_index(drop=True)
 
         if self.cfg.debug:
-            self.subset_df = self.subset_df.head(self.cfg.debug_n_rows).copy()
+            subset_df = subset_df.head(self.cfg.debug_n_rows).copy()
             self.log.info(
                 "Debug mode enabled: limiting subset to first %d rows.",
-                len(self.subset_df),
+                len(subset_df),
             )
 
-        if self.subset_df.empty:
+        if subset_df.empty:
             self.log.warning("No rows left after filtering; returning empty dataframe.")
         else:
             self.log.info(
                 "Selected %d rows from %d input rows.",
-                len(self.subset_df),
-                len(self.cohort_df),
+                len(subset_df),
+                len(cohort_df),
             )
+        return subset_df
 
     # -----------------------------------------------------------------------
     # save subset as chunked parquet files
     # -----------------------------------------------------------------------
 
-    def save_subset(self):
+    def save_subset(self, subset_df: pd.DataFrame) -> None:
         if self.cfg.output_path:
             out_path = Path(self.cfg.output_path)
 
@@ -255,11 +253,11 @@ class SubsetBuilder:
             ensure_dir(out_path)
 
             chunk_size = max(1, self.cfg.chunk_size)
-            n_rows = len(self.subset_df)
+            n_rows = len(subset_df)
             n_chunks = max(1, (n_rows + chunk_size - 1) // chunk_size)
 
             for chunk_index in range(n_chunks):
-                chunk = self.subset_df.iloc[
+                chunk = subset_df.iloc[
                     chunk_index * chunk_size : (chunk_index + 1) * chunk_size
                 ]
                 chunk_path = out_path / f"chunk_{chunk_index:04d}.parquet"
@@ -286,8 +284,8 @@ class SubsetBuilder:
         2. Select the subset based on person IDs and note titles.
         3. Save the filtered subset to disk.
         """
-        self.load_cohort_notes()
-        self.select_subset()
-        self.save_subset()
+        cohort_df = self.load_cohort_notes()
+        subset_df = self.select_subset(cohort_df)
+        self.save_subset(subset_df)
         self.log.debug("Subset selection process completed successfully.")
-        return self.subset_df
+        return subset_df
