@@ -1,5 +1,12 @@
+# src/cohort/subset_builder.py
 """
-Subset selection utilities for the MRSA NLP rule-based project.
+Subset selection from the MRSA cohort.
+
+This module selects a subset of notes from the MRSA cohort based on specified
+person IDs and note titles.
+
+Input  : MRSA cohort notes in parquet format, optional CSV of person IDs with labels.
+Output : data/interim/airms/notes/chunk_*.parquet
 """
 
 from __future__ import annotations
@@ -25,6 +32,8 @@ class SubsetConfig:
 
     Attributes
     ----------
+    mrsa_cohort_notes_path : str
+        Path to the parquet file with the merged MRSA cohort notes.
     person_id_column : str
         Name of the column that stores the person identifier.
     person_ids_csv_path : str | None
@@ -42,7 +51,7 @@ class SubsetConfig:
     selected_note_titles : list[str], optional
         Allowed note titles. If empty, no note-title filter is applied.
     output_path : str | None
-        Optional directory where chunked parquet files are written.
+        Directory where chunked parquet files are written.
     chunk_size : int
         Number of rows per output parquet chunk file. Default is 1 (one row per file).
     debug : bool
@@ -62,7 +71,7 @@ class SubsetConfig:
     selected_note_titles: List[str] = field(default_factory=lambda: [
         "H&P", "Progress Notes", "Discharge Summary", "Consults"
     ])
-    output_path: Optional[str] = None
+    output_path: Optional[str] = "data/interim/airms/notes"
     chunk_size: int = 1
     debug: bool = False
     debug_n_rows: int = 100
@@ -70,10 +79,24 @@ class SubsetConfig:
 
 class SubsetBuilder:
     """
-    Build a filtered note subset from a pandas DataFrame.
+    Builds a filtered note subset from a pandas DataFrame.
 
     The builder can optionally filter the input dataframe by person ID and
     note title, then stores all matching notes in the configured output file.
+
+    Parameters
+    ----------
+    config : SubsetConfig
+        Configuration for this subset builder run.
+    logger : logging.Logger, optional
+        Logger to use; defaults to module-level LOG.
+
+    Example
+    -------
+    >>> from src.cohort.subset_builder import SubsetConfig, SubsetBuilder
+    >>> cfg = SubsetConfig(debug=True)
+    >>> sb = SubsetBuilder(cfg)
+    >>> sb.run()
     """
 
     def __init__(self, config: SubsetConfig, logger: logging.Logger = LOG) -> None:
@@ -156,6 +179,10 @@ class SubsetBuilder:
 
         return person_ids
 
+    # -----------------------------------------------------------------------
+    # select subset by person ID and note title
+    # -----------------------------------------------------------------------
+
     def select_subset(self):
         """
         Loads the MRSA cohort notes and applies filters based on person IDs and note titles.
@@ -211,6 +238,10 @@ class SubsetBuilder:
                 len(self.subset_df),
                 len(self.cohort_df),
             )
+
+    # -----------------------------------------------------------------------
+    # save subset as chunked parquet files
+    # -----------------------------------------------------------------------
 
     def save_subset(self):
         if self.cfg.output_path:
