@@ -12,17 +12,20 @@ CHUNK_SIZE=1
 
 LOG_LEVEL="INFO"
 SEED=7
+DEBUG=false
+DEBUG_N_ROWS=100
 
 # -------------------------
 # Parse optional args
 # -------------------------
 # Usage:
-#   bash scripts/run_cohort_builder.sh [--cases-only] [--chunk-size N]
+#   bash scripts/run_subset_builder.sh [--cases-only] [--chunk-size N] [--debug]
 while [ $# -gt 0 ]; do
   case "$1" in
     --cases-only)   SELECTED_LABELS="1"; shift ;;
     --chunk-size)   shift; CHUNK_SIZE="$1"; shift ;;
     --seed)         shift; SEED="$1"; shift ;;
+    --debug)        DEBUG=true; shift ;;
     *)              shift ;;
   esac
 done
@@ -57,21 +60,28 @@ main() {
   echo "[run] selected_labels : $SELECTED_LABELS"
   echo "[run] out_dir         : $OUT_DIR"
   echo "[run] chunk_size      : $CHUNK_SIZE"
+  echo "[run] debug           : $DEBUG"
 
   EXTRA_ARGS=()
   if [[ -n "$PERSON_IDS_CSV" ]]; then
-    EXTRA_ARGS+=(--person-ids-csv-path "$PERSON_IDS_CSV")
+    EXTRA_ARGS+=(--cohort-csv-path "$PERSON_IDS_CSV")
+  fi
+
+  DEBUG_FLAGS=(--no-debug)
+  if [[ "$DEBUG" == "true" ]]; then
+    DEBUG_FLAGS=(--debug --debug-n-rows "$DEBUG_N_ROWS")
   fi
 
   python -m src.cli \
       --log-level "$LOG_LEVEL" \
       --seed "$SEED" \
-      build-cohort \
+      build-subset \
       --notes-path "$NOTES_PATH" \
       --selected-labels "$SELECTED_LABELS" \
       --out-dir "$OUT_DIR" \
       --chunk-size "$CHUNK_SIZE" \
-      "${EXTRA_ARGS[@]}"
+      "${EXTRA_ARGS[@]}" \
+      "${DEBUG_FLAGS[@]}"
 
   echo "[run] Subset builder complete."
 }

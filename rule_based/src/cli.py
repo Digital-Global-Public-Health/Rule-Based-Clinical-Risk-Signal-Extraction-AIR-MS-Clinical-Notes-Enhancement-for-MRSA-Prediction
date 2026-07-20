@@ -100,6 +100,7 @@ def build_subset(
     ),
     chunk_size: int = typer.Option(1, help="Notes per output Parquet chunk."),
     debug: bool = typer.Option(False, "--debug/--no-debug", help="Debug mode: limit to a small sample."),
+    debug_n_rows: int = typer.Option(100, help="Rows kept in the subset when --debug is set."),
 ) -> None:
     """
     Pipeline Step 1 — Build note subset.
@@ -119,6 +120,8 @@ def build_subset(
         selected_note_titles=[],
         output_path=str(out_dir),
         chunk_size=chunk_size,
+        debug=debug,
+        debug_n_rows=debug_n_rows,
     )
 
     save_config_snapshot(
