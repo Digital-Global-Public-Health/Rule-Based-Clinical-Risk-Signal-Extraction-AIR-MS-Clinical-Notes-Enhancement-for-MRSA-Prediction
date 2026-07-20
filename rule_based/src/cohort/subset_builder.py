@@ -45,6 +45,10 @@ class SubsetConfig:
         Optional directory where chunked parquet files are written.
     chunk_size : int
         Number of rows per output parquet chunk file. Default is 1 (one row per file).
+    debug : bool
+        If True, limits the resulting subset to the first debug_n_rows rows.
+    debug_n_rows : int
+        If debug is True, limits the number of rows kept for debugging purposes.
     """
 
     mrsa_cohort_notes_path: str = "/sc/arion/projects/MRSA-HPI-MS/airms-app-host-and-hospital-adaptation-of-mrsa/mrsa_nlp/rule_based/data/interim/airms/notes/all/cohort_notes.parquet"
@@ -60,6 +64,8 @@ class SubsetConfig:
     ])
     output_path: Optional[str] = None
     chunk_size: int = 1
+    debug: bool = False
+    debug_n_rows: int = 100
 
 
 class SubsetBuilder:
@@ -189,6 +195,13 @@ class SubsetBuilder:
             ]
 
         self.subset_df = working_df.reset_index(drop=True)
+
+        if self.cfg.debug:
+            self.subset_df = self.subset_df.head(self.cfg.debug_n_rows).copy()
+            self.log.info(
+                "Debug mode enabled: limiting subset to first %d rows.",
+                len(self.subset_df),
+            )
 
         if self.subset_df.empty:
             self.log.warning("No rows left after filtering; returning empty dataframe.")
