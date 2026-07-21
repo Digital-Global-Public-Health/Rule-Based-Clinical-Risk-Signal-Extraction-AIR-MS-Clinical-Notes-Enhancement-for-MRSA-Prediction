@@ -94,6 +94,10 @@ def build_subset(
         "1",
         help="Comma-separated labels to include (e.g. '1' for cases only, '0,1' for all).",
     ),
+    selected_note_titles: str = typer.Option(
+        "H&P, Progress Notes, Discharge Summary, Consults",
+        help="Comma-separated note titles to include (e.g. 'Discharge Summary' or 'Progress Notes').",
+    ),
     out_dir: Path = typer.Option(
         Path("data/interim/airms/notes"),
         help="Directory for filtered subset note chunks.",
@@ -109,6 +113,7 @@ def build_subset(
     and note title, then saves the filtered notes to chunked Parquet files.
     """
     labels = [int(label.strip()) for label in selected_labels.split(",")]
+    note_titles = [t.strip() for t in selected_note_titles.split(",") if t.strip()]
     cfg = SubsetConfig(
         mrsa_cohort_notes_path=str(notes_path),
         person_id_column="PERSON_ID",
@@ -117,7 +122,7 @@ def build_subset(
         person_ids_csv_label_column="LABEL",
         selected_labels=labels,
         note_title_column="NOTE_TITLE",
-        selected_note_titles=[],
+        selected_note_titles=note_titles,
         output_path=str(out_dir),
         chunk_size=chunk_size,
         debug=debug,
