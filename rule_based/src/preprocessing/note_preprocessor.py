@@ -425,7 +425,7 @@ class NotePreprocessor:
         after_dedup = len(df_dedup)
         n_dropped = before_dedup - after_dedup
 
-        self.log.info(f"Deduplicating notes: dropped {n_dropped} duplicates.")
+        self.log.debug(f"Deduplicating notes: dropped {n_dropped} duplicates.")
 
         return df_dedup
 
@@ -553,4 +553,4 @@ class NotePreprocessor:
                 processed_chunks += 1
                 self.log.debug(f"Processed {chunk_file.name}.")
 
-            self.log.debug(f"Preprocessing complete. Chunks processed: {processed_chunks}. Notes in: {total_in}. Notes out: {total_out}.")
+            self.log.info(f"Preprocessing complete. Chunks processed: {processed_chunks}. Notes in: {total_in}. Notes out: {total_out}.")
