@@ -60,7 +60,8 @@ class SubsetConfig:
         to the distinct person IDs found in the cohort dataframe.
         This limit is necessary for creating a small subset for evaluation or debugging purposes.
     n_notes_per_type : int | None
-        Optional limit on the number of notes per type to include in the subset.
+        Optional limit on the number of notes per note type, per patient,
+        to include in the subset.
     debug : bool
         If True, limits the resulting subset to the first debug_n_rows rows.
     debug_n_rows : int
@@ -248,12 +249,15 @@ class SubsetBuilder:
 
         if self.cfg.n_notes_per_type is not None and self.cfg.n_notes_per_type > 0:
             subset_df = (
-                subset_df.groupby(self.cfg.note_title_column, group_keys=False)
+                subset_df.groupby(
+                    [self.cfg.person_id_column, self.cfg.note_title_column],
+                    group_keys=False,
+                )
                 .head(self.cfg.n_notes_per_type)
                 .reset_index(drop=True)
             )
             self.log.info(
-                "Limiting to first %d notes per note title; resulting subset has %d rows.",
+                "Limiting to first %d notes per patient per note title; resulting subset has %d rows.",
                 self.cfg.n_notes_per_type,
                 len(subset_df),
             )
