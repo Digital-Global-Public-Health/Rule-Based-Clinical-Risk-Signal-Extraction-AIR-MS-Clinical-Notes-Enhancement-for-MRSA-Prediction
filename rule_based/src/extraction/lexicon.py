@@ -270,7 +270,7 @@ class Lexicon:
             All non-empty pattern strings for this risk factor.
         """
         entry = self.get_entry(risk_factor)
-        return [p for p in entry.drug_names + entry.keywords + entry.abbreviations if p]
+        return [p for p in entry.icd_codes + entry.drug_names + entry.keywords + entry.abbreviations if p]
 
     def get_all_patterns(self) -> Dict[str, List[str]]:
         """
