@@ -37,6 +37,7 @@ from rich import print
 from src.utils_logging import configure_logging, logger, make_run_dir, save_config_snapshot, log_timing
 from src.utils_seed import set_seed, GLOBAL_SEED
 from src.cohort.subset_builder import SubsetConfig, SubsetBuilder
+from src.annotation.gold_standard_builder import GoldStandardConfig, GoldStandardBuilder
 from src.preprocessing.note_preprocessor import PreprocessorConfig, NotePreprocessor
 from src.extraction.lexicon import LexiconConfig, Lexicon
 from src.extraction.negation_handler import NegationConfig, NegationHandler
@@ -139,6 +140,58 @@ def build_subset(
     )
 
     builder = SubsetBuilder(cfg, run_dir=_current_run_dir())
+    builder.run()
+
+
+# ---------------------------------------------------------------------------
+# 1b. annotate-gold-standard (interactive, not part of run-rule-pipeline)
+# ---------------------------------------------------------------------------
+
+@app.command(
+    name="annotate-gold-standard",
+    help="Interactively annotate a note subset to build a gold-standard CSV.",
+)
+def annotate_gold_standard(
+    input_dir: Path = typer.Option(
+        Path("data/interim/airms/notes"),
+        help="Directory with the raw note chunk_*.parquet files to annotate.",
+    ),
+    lexicon_path: Path = typer.Option(
+        Path("lexicons/mrsa_risk_factors_v2.csv"),
+        help="Lexicon CSV whose risk factors become the checklist items.",
+    ),
+    checklist_dir: Path = typer.Option(
+        Path("data/annotations/checklists"),
+        help="Directory for the per-note working checklist files.",
+    ),
+    output_file: Path = typer.Option(
+        Path("data/annotations/gold_standard.csv"),
+        help="Path of the final merged gold-standard CSV.",
+    ),
+    editor: Optional[str] = typer.Option(
+        None, help="Editor command to open each checklist. Defaults to $EDITOR, then 'vi'.",
+    ),
+    force_reannotate: bool = typer.Option(
+        False, help="Recreate and reopen checklists that already exist instead of skipping them.",
+    ),
+) -> None:
+    """
+    Interactive gold-standard annotation.
+
+    Prints each note to stdout and opens its per-note checklist in an
+    editor for manual review, then merges all checklists into a single
+    gold-standard CSV consumable by the `evaluate` command. Requires human
+    interaction, so it is not part of `run-rule-pipeline`.
+    """
+    cfg = GoldStandardConfig(
+        input_dir=input_dir,
+        lexicon_path=lexicon_path,
+        checklist_dir=checklist_dir,
+        output_file=output_file,
+        editor=editor,
+        force_reannotate=force_reannotate,
+    )
+    builder = GoldStandardBuilder(cfg)
     builder.run()
 
 
