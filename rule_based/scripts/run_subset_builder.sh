@@ -12,6 +12,8 @@ CHUNK_SIZE=1
 
 LOG_LEVEL="INFO"
 SEED=7
+N_PATIENTS=""
+N_NOTES_PER_TYPE=""
 DEBUG=false
 DEBUG_N_ROWS=100
 
@@ -19,15 +21,17 @@ DEBUG_N_ROWS=100
 # Parse optional args
 # -------------------------
 # Usage:
-#   bash scripts/run_subset_builder.sh [--cases-only] [--chunk-size N] [--debug] [debug-n-rows N] [--seed N]]
+#   bash scripts/run_subset_builder.sh [--cases-only] [--chunk-size N] [--n-patients N] [--n-notes-per-type N] [--debug] [debug-n-rows N] [--seed N]]
 while [ $# -gt 0 ]; do
   case "$1" in
-    --cases-only)   SELECTED_LABELS="1"; shift ;;
-    --chunk-size)   shift; CHUNK_SIZE="$1"; shift ;;
-    --seed)         shift; SEED="$1"; shift ;;
-    --debug)        DEBUG=true; LOG_LEVEL="DEBUG"; shift ;;
-    --debug-n-rows) shift; DEBUG_N_ROWS="$1"; shift ;;
-    *)              shift ;;
+    --cases-only)       SELECTED_LABELS="1"; shift ;;
+    --chunk-size)       shift; CHUNK_SIZE="$1"; shift ;;
+    --seed)             shift; SEED="$1"; shift ;;
+    --n-patients)       shift; N_PATIENTS="$1"; shift ;;
+    --n-notes-per-type) shift; N_NOTES_PER_TYPE="$1"; shift ;;
+    --debug)            DEBUG=true; LOG_LEVEL="DEBUG"; shift ;;
+    --debug-n-rows)     shift; DEBUG_N_ROWS="$1"; shift ;;
+    *)                  shift ;;
   esac
 done
 
@@ -61,11 +65,23 @@ main() {
   echo "[run] selected_labels : $SELECTED_LABELS"
   echo "[run] out_dir         : $OUT_DIR"
   echo "[run] chunk_size      : $CHUNK_SIZE"
+  if [[ -n "$N_PATIENTS" ]]; then
+    echo "[run] n_patients      : $N_PATIENTS"
+  fi
+  if [[ -n "$N_NOTES_PER_TYPE" ]]; then
+    echo "[run] n_notes_per_type: $N_NOTES_PER_TYPE"
+  fi
   echo "[run] debug           : $DEBUG"
 
   EXTRA_ARGS=()
   if [[ -n "$PERSON_IDS_CSV" ]]; then
     EXTRA_ARGS+=(--cohort-csv-path "$PERSON_IDS_CSV")
+  fi
+  if [[ -n "$N_PATIENTS" ]]; then
+    EXTRA_ARGS+=(--n-patients "$N_PATIENTS")
+  fi
+  if [[ -n "$N_NOTES_PER_TYPE" ]]; then
+    EXTRA_ARGS+=(--n-notes-per-type "$N_NOTES_PER_TYPE")
   fi
 
   DEBUG_FLAGS=(--no-debug)

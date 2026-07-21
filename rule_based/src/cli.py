@@ -103,6 +103,8 @@ def build_subset(
         help="Directory for filtered subset note chunks.",
     ),
     chunk_size: int = typer.Option(1, help="Notes per output Parquet chunk."),
+    n_patients: Optional[int] = typer.Option(None, help="Maximum number of unique patients to include."),
+    n_notes_per_type: Optional[int] = typer.Option(None, help="Maximum number of notes per note title to include."),
     debug: bool = typer.Option(False, "--debug/--no-debug", help="Debug mode: limit to a small sample."),
     debug_n_rows: int = typer.Option(100, help="Rows kept in the subset when --debug is set."),
 ) -> None:
@@ -125,6 +127,8 @@ def build_subset(
         selected_note_titles=note_titles,
         output_path=str(out_dir),
         chunk_size=chunk_size,
+        n_patients=n_patients,
+        n_notes_per_type=n_notes_per_type,
         debug=debug,
         debug_n_rows=debug_n_rows,
     )

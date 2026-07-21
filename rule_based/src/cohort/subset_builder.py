@@ -54,6 +54,13 @@ class SubsetConfig:
         Directory where chunked parquet files are written.
     chunk_size : int
         Number of rows per output parquet chunk file. Default is 1 (one row per file).
+    n_patients : int | None
+        Optional limit on the number of unique patients to include in the subset.
+        Applied to the explicit/CSV person-ID list if one is given, otherwise
+        to the distinct person IDs found in the cohort dataframe.
+        This limit is necessary for creating a small subset for evaluation or debugging purposes.
+    n_notes_per_type : int | None
+        Optional limit on the number of notes per type to include in the subset.
     debug : bool
         If True, limits the resulting subset to the first debug_n_rows rows.
     debug_n_rows : int
@@ -73,6 +80,8 @@ class SubsetConfig:
     ])
     output_path: Optional[str] = "data/interim/airms/notes"
     chunk_size: int = 1
+    n_patients: Optional[int] = None
+    n_notes_per_type: Optional[int] = None
     debug: bool = False
     debug_n_rows: int = 100
 
@@ -191,6 +200,23 @@ class SubsetBuilder:
             raise ValueError("Cohort not loaded or empty. Please run load_cohort_notes() first.")
 
         allowed_person_ids = self._load_person_ids()
+
+        if self.cfg.n_patients is not None and self.cfg.n_patients > 0:
+            if not allowed_person_ids:
+                if self.cfg.person_id_column not in cohort_df.columns:
+                    raise ValueError(
+                        f"Missing required column in cohort dataframe: {self.cfg.person_id_column}"
+                    )
+                allowed_person_ids = set(
+                    cohort_df[self.cfg.person_id_column].map(self._normalize_patient_id)
+                )
+                allowed_person_ids.discard(None)
+            allowed_person_ids = set(sorted(allowed_person_ids, key=str)[: self.cfg.n_patients])
+            self.log.info(
+                "Limiting to first %d unique patients.",
+                len(allowed_person_ids),
+            )
+
         if allowed_person_ids:
             if self.cfg.person_id_column not in cohort_df.columns:
                 raise ValueError(
@@ -219,6 +245,18 @@ class SubsetBuilder:
             ]
 
         subset_df = cohort_df.reset_index(drop=True)
+
+        if self.cfg.n_notes_per_type is not None and self.cfg.n_notes_per_type > 0:
+            subset_df = (
+                subset_df.groupby(self.cfg.note_title_column, group_keys=False)
+                .head(self.cfg.n_notes_per_type)
+                .reset_index(drop=True)
+            )
+            self.log.info(
+                "Limiting to first %d notes per note title; resulting subset has %d rows.",
+                self.cfg.n_notes_per_type,
+                len(subset_df),
+            )
 
         if self.cfg.debug:
             subset_df = subset_df.head(self.cfg.debug_n_rows).copy()
