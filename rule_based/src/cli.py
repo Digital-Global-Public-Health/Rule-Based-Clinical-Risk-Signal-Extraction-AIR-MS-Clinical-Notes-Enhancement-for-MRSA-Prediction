@@ -138,7 +138,7 @@ def build_subset(
         run_dir=_current_run_dir(),
     )
 
-    builder = SubsetBuilder(cfg)
+    builder = SubsetBuilder(cfg, run_dir=_current_run_dir())
     builder.run()
 
 

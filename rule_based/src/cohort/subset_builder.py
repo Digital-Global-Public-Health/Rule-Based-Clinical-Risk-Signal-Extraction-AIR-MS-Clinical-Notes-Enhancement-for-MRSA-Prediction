@@ -19,7 +19,7 @@ import logging
 
 import pandas as pd
 
-from src.utils_io import ensure_dir, read_parquet, write_parquet
+from src.utils_io import ensure_dir, read_parquet, write_csv, write_parquet
 
 
 LOG = logging.getLogger("mrsa_nlp.rule.cohort.subset")
@@ -100,6 +100,9 @@ class SubsetBuilder:
         Configuration for this subset builder run.
     logger : logging.Logger, optional
         Logger to use; defaults to module-level LOG.
+    run_dir : Path, optional
+        Timestamped run directory. If given, a per-patient/per-note-type
+        overview (``subset_overview.csv``) is written there.
 
     Example
     -------
@@ -109,9 +112,15 @@ class SubsetBuilder:
     >>> sb.run()
     """
 
-    def __init__(self, config: SubsetConfig, logger: logging.Logger = LOG) -> None:
+    def __init__(
+        self,
+        config: SubsetConfig,
+        logger: logging.Logger = LOG,
+        run_dir: Optional[Path] = None,
+    ) -> None:
         self.cfg = config
         self.log = logger
+        self.run_dir = run_dir
 
     # -----------------------------------------------------------------------
     # load mrsa cohort notes
@@ -312,6 +321,43 @@ class SubsetBuilder:
                 out_path,
             )
 
+    # -----------------------------------------------------------------------
+    # per-patient / per-note-type overview
+    # -----------------------------------------------------------------------
+
+    def save_overview(self, subset_df: pd.DataFrame) -> Optional[Path]:
+        """
+        Save a table with one row per patient and one column per note type,
+        counting how many notes of that type ended up in the subset.
+
+        Written to ``{run_dir}/subset_overview.csv``. No-op if ``run_dir``
+        was not set or the subset is empty.
+        """
+        if self.run_dir is None:
+            self.log.debug("No run_dir configured; skipping subset overview export.")
+            return None
+
+        if subset_df.empty:
+            self.log.warning("Subset is empty; skipping subset overview export.")
+            return None
+
+        overview_df = (
+            subset_df.groupby([self.cfg.person_id_column, self.cfg.note_title_column])
+            .size()
+            .unstack(fill_value=0)
+            .reset_index()
+        )
+        overview_df.columns.name = None
+
+        overview_path = Path(self.run_dir) / "subset_overview.csv"
+        write_csv(overview_df, overview_path)
+        self.log.info(
+            "Saved subset overview for %d patients to %s",
+            len(overview_df),
+            overview_path,
+        )
+        return overview_path
+
     # ------------------------------------------------------------------
     # Orchestration
     # ------------------------------------------------------------------
@@ -325,9 +371,11 @@ class SubsetBuilder:
         1. Load the MRSA cohort notes.
         2. Select the subset based on person IDs and note titles.
         3. Save the filtered subset to disk.
+        4. Save a per-patient/per-note-type overview, if run_dir was set.
         """
         cohort_df = self.load_cohort_notes()
         subset_df = self.select_subset(cohort_df)
         self.save_subset(subset_df)
+        self.save_overview(subset_df)
         self.log.debug("Subset selection process completed successfully.")
         return subset_df
