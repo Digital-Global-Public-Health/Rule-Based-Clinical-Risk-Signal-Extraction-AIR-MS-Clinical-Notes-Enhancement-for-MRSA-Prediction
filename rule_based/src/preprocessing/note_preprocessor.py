@@ -425,7 +425,7 @@ class NotePreprocessor:
         after_dedup = len(df_dedup)
         n_dropped = before_dedup - after_dedup
 
-        self.log.debug(f"Deduplicating notes: dropped {n_dropped} duplicates.")
+        self.log.info(f"Deduplicating notes: dropped {n_dropped} duplicates.")
 
         return df_dedup
 
