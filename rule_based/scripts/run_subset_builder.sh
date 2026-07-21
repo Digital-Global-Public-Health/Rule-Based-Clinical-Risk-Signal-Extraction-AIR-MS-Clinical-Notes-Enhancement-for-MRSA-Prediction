@@ -19,13 +19,14 @@ DEBUG_N_ROWS=100
 # Parse optional args
 # -------------------------
 # Usage:
-#   bash scripts/run_subset_builder.sh [--cases-only] [--chunk-size N] [--debug]
+#   bash scripts/run_subset_builder.sh [--cases-only] [--chunk-size N] [--debug] [debug-n-rows N] [--seed N]]
 while [ $# -gt 0 ]; do
   case "$1" in
     --cases-only)   SELECTED_LABELS="1"; shift ;;
     --chunk-size)   shift; CHUNK_SIZE="$1"; shift ;;
     --seed)         shift; SEED="$1"; shift ;;
-    --debug)        DEBUG=true; shift ;;
+    --debug)        DEBUG=true; LOG_LEVEL="DEBUG"; shift ;;
+    --debug-n-rows) shift; DEBUG_N_ROWS="$1"; shift ;;
     *)              shift ;;
   esac
 done

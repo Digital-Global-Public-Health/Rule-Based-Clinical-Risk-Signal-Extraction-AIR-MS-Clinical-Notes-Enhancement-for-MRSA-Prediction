@@ -8,7 +8,7 @@
 #   2. Preprocessing has been run
 #
 # Usage:
-#   bash scripts/run_feature_extraction.sh [--debug]
+#   bash scripts/run_feature_extraction.sh [--debug] [--debug-n-notes N]
 
 set -euo pipefail
 
@@ -29,9 +29,11 @@ LEVEL="visit"
 DEBUG=false
 DEBUG_N_NOTES=200
 
-for arg in "$@"; do
-    case $arg in
-        --debug) DEBUG=true ;;
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --debug)          DEBUG=true; LOG_LEVEL="DEBUG"; shift ;;
+        --debug-n-notes)  shift; DEBUG_N_NOTES="$1"; shift ;;
+        *)                shift ;;
     esac
 done
 

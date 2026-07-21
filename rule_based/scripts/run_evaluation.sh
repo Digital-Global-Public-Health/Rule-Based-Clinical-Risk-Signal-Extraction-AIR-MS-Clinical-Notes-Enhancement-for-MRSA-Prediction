@@ -30,7 +30,7 @@ DEBUG=false
 while [[ $# -gt 0 ]]; do
     case $1 in
         --gold)      GOLD_PATH="$2"; shift 2 ;;
-        --debug)     DEBUG=true; shift ;;
+        --debug)     DEBUG=true;  LOG_LEVEL="DEBUG"; shift ;;
         *)           FEATURES_PATH="$1"; shift ;;
     esac
 done
