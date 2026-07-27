@@ -321,7 +321,7 @@ class GoldStandardBuilder:
         self.log.info("Merged %d annotated notes into the gold standard.", len(gold_df))
         return gold_df
     
-    def aggregate_annotations(self, gold_df: pd.DataFrame, level: str) -> pd.DataFrame:
+    def aggregate_annotations(self, gold_df: pd.DataFrame) -> pd.DataFrame:
         """
         Aggregate the gold-standard DataFrame to the specified level.
 
@@ -337,6 +337,7 @@ class GoldStandardBuilder:
         pd.DataFrame
             The aggregated gold-standard DataFrame.
         """
+        level = self.cfg.aggregation_level.lower()
         if level == "visit":
             group_cols = ["VISIT_OCCURRENCE_ID"]
         elif level == "person":
@@ -385,6 +386,6 @@ class GoldStandardBuilder:
         self.annotate_notes(notes_df, risk_factors)
 
         gold_df = self.merge_annotations(risk_factors)
-        gold_df = self.aggregate_annotations(gold_df, self.aggregation_level)
+        gold_df = self.aggregate_annotations(gold_df)
         self.save_annotations(gold_df)
         return gold_df
