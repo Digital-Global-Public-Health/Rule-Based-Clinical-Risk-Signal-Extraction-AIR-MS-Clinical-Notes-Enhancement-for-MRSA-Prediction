@@ -194,6 +194,7 @@ def annotate_gold_standard(
         output_file=output_file,
         editor=editor,
         force_reannotate=force_reannotate,
+        aggregation_level=aggregation_level,
     )
     builder = GoldStandardBuilder(cfg)
     builder.run()
