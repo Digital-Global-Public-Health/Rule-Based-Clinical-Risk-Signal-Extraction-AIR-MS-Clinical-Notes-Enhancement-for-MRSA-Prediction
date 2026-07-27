@@ -160,6 +160,10 @@ def annotate_gold_standard(
         Path("lexicons/mrsa_risk_factors_v2.csv"),
         help="Lexicon CSV whose risk factors become the checklist items.",
     ),
+    aggregation_level: str = typer.Option(
+        "visit",
+        help="Aggregation level for the gold-standard CSV: 'visit' or 'person'.",
+    ),
     checklist_dir: Path = typer.Option(
         Path("data/annotations/checklists"),
         help="Directory for the per-note working checklist files.",
