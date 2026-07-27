@@ -54,6 +54,9 @@ class GoldStandardConfig:
         Directory containing the raw note chunk_*.parquet files to annotate.
     lexicon_path : Path
         Path to the lexicon CSV; its risk factors become the checklist items.
+    aggregation_level : str
+        "visit"  → one row per VISIT_OCCURRENCE_ID  (primary).
+        "person" → one row per PERSON_ID (aggregate across all visits).
     checklist_dir : Path
         Directory where one working checklist file per note is written.
     output_file : Path
@@ -67,6 +70,7 @@ class GoldStandardConfig:
 
     input_dir: Path = Path("data/interim/airms/notes")
     lexicon_path: Path = Path("lexicons/mrsa_risk_factors_v2.csv")
+    aggregation_level: str = "visit"
     checklist_dir: Path = Path("data/annotations/checklists")
     output_file: Path = Path("data/annotations/gold_standard.csv")
     editor: Optional[str] = None
@@ -316,6 +320,40 @@ class GoldStandardBuilder:
 
         self.log.info("Merged %d annotated notes into the gold standard.", len(gold_df))
         return gold_df
+    
+    def aggregate_annotations(self, gold_df: pd.DataFrame, level: str) -> pd.DataFrame:
+        """
+        Aggregate the gold-standard DataFrame to the specified level.
+
+        Parameters
+        ----------
+        gold_df : pd.DataFrame
+            The merged gold-standard DataFrame with one row per note.
+        level : str
+            The aggregation level: "visit" or "person".
+
+        Returns
+        -------
+        pd.DataFrame
+            The aggregated gold-standard DataFrame.
+        """
+        if level == "visit":
+            group_cols = ["VISIT_OCCURRENCE_ID"]
+        elif level == "person":
+            group_cols = ["PERSON_ID"]
+        else:
+            raise ValueError(f"Invalid aggregation level: {level}. Must be 'visit' or 'person'.")
+
+        extra_id_col = "PERSON_ID" if level == "visit" else None
+        agg_dict = {col: "max" for col in gold_df.columns if col.startswith("has_")}
+        if extra_id_col and extra_id_col in gold_df.columns:
+            agg_dict[extra_id_col] = "first"
+        agg_dict.update({col: lambda x: "; ".join(filter(None, x)) for col in gold_df.columns if col.startswith("evidence_")})
+
+
+        aggregated_df = gold_df.groupby(group_cols, as_index=False).agg(agg_dict)
+        self.log.info("Aggregated gold standard to %s level: %d rows.", level, len(aggregated_df))
+        return aggregated_df
 
     def save_annotations(self, gold_df: pd.DataFrame) -> None:
         """Write the merged gold-standard DataFrame to cfg.output_file."""
@@ -339,7 +377,7 @@ class GoldStandardBuilder:
         -----
         1. Load notes and the lexicon's risk factors.
         2. Interactively annotate any note without an existing checklist.
-        3. Merge all checklists and save the gold-standard CSV.
+        3. Merge all checklists, aggregate by the specified level, and save the gold-standard CSV.
         """
         notes_df = self.load_notes()
         risk_factors = self.load_risk_factors()
@@ -347,5 +385,6 @@ class GoldStandardBuilder:
         self.annotate_notes(notes_df, risk_factors)
 
         gold_df = self.merge_annotations(risk_factors)
+        gold_df = self.aggregate_annotations(gold_df, self.aggregation_level)
         self.save_annotations(gold_df)
         return gold_df
