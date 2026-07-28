@@ -265,10 +265,14 @@ class RuleEvaluator:
         -------
         pd.DataFrame
             Columns: risk_factor, TP, FP, FN, TN, precision, recall, f1,
-            meets_precision_target, meets_recall_target.
+            meets_precision_target, meets_recall_target, FN_ids, FP_ids.
             meets_*_target is None ("N/A") wherever the corresponding
             metric is NaN (not evaluable — see compute_prf1).
-            Sorted by F1 descending.
+            FN_ids / FP_ids are comma-separated join_col values identifying
+            the specific false-negative / false-positive rows, for
+            qualitative error review in the validation report.
+            Sorted by F1 descending. The join key actually used is stored
+            in metrics_df.attrs["join_col"].
 
         Notes
         -----
@@ -317,6 +321,8 @@ class RuleEvaluator:
             y_pred = merged_df[f"{feature}_pred"]
             counts = self.compute_confusion_counts(y_true, y_pred)
             precision, recall, f1 = self.compute_prf1(counts["TP"], counts["FP"], counts["FN"])
+            fn_ids = merged_df.loc[(y_true == 1) & (y_pred == 0), join_col]
+            fp_ids = merged_df.loc[(y_true == 0) & (y_pred == 1), join_col]
             metrics_list.append({
                 "risk_factor": feature,
                 "TP": counts["TP"],
@@ -332,12 +338,15 @@ class RuleEvaluator:
                 "meets_recall_target": (
                     recall >= self.cfg.target_recall if pd.notna(recall) else None
                 ),
+                "FN_ids": ", ".join(fn_ids.astype(str)),
+                "FP_ids": ", ".join(fp_ids.astype(str)),
             })
         metrics_df = pd.DataFrame(metrics_list)
         metrics_df.sort_values(by="f1", ascending=False, inplace=True)
+        metrics_df.attrs["join_col"] = join_col
         metrics_csv_path = self.eval_dir / "metrics_by_factor.csv"
         metrics_df.to_csv(metrics_csv_path, index=False)
-        self.log.info(f"Saved metrics by factor: {metrics_csv_path}")
+        self.log.debug(f"Saved metrics by factor: {metrics_csv_path}")
         return metrics_df
 
     # ------------------------------------------------------------------
@@ -391,8 +400,8 @@ class RuleEvaluator:
         self.log.info(prevalence_df.head(5).to_string(index=False))
         zero_prev = prevalence_df[prevalence_df["prevalence_overall"] == 0]
         if not zero_prev.empty:
-            self.log.warning("Factors with zero prevalence:")
-            self.log.warning(zero_prev.to_string(index=False))
+            self.log.info("Factors with zero prevalence:")
+            self.log.info(zero_prev.to_string(index=False))
         return prevalence_df
 
     # ------------------------------------------------------------------
@@ -446,7 +455,7 @@ class RuleEvaluator:
         plt.tight_layout()
         plt.savefig(out_path, dpi=self.cfg.plot_dpi, bbox_inches="tight")
         plt.close(fig)
-        self.log.info(f"Saved feature prevalence plot: {out_path}")
+        self.log.debug(f"Saved feature prevalence plot: {out_path}")
         return out_path
 
     def plot_metrics_by_factor(
@@ -498,7 +507,7 @@ class RuleEvaluator:
         plt.tight_layout()
         plt.savefig(out_path, dpi=self.cfg.plot_dpi, bbox_inches="tight")
         plt.close(fig)
-        self.log.info(f"Saved metrics by factor plot: {out_path}")
+        self.log.debug(f"Saved metrics by factor plot: {out_path}")
         return out_path
 
     def plot_label_distribution(
@@ -529,7 +538,7 @@ class RuleEvaluator:
         out_path = self.eval_dir / "label_distribution.png"
         plt.savefig(out_path, dpi=self.cfg.plot_dpi, bbox_inches="tight")
         plt.close(fig)
-        self.log.info(f"Saved label distribution plot: {out_path}")
+        self.log.debug(f"Saved label distribution plot: {out_path}")
         return out_path
 
     # ------------------------------------------------------------------
@@ -567,6 +576,8 @@ class RuleEvaluator:
         3. Metrics table (if gold standard available).
         4. Pass/fail summary against precision/recall targets.
         5. Recommendations for rules that fail targets.
+        6. False negative / false positive IDs per risk factor (if gold
+           standard available), for qualitative error review.
         """
         validation_report_path = self.eval_dir / "validation_report.txt"
         with open(validation_report_path, "w") as f:
@@ -575,12 +586,24 @@ class RuleEvaluator:
             f.write(f"Case count: {features_df[features_df['LABEL'] == 1].shape[0]} | ")
             f.write(f"Control count: {features_df[features_df['LABEL'] == 0].shape[0]}\n")
             f.write("\nFeature Prevalence:\n")
+            f.write("Percentage of records with feature = 1 (overall, cases, controls, ratio)\n\n")
             f.write(prevalence_df.to_string(index=False))
             f.write("\n\n")
             if metrics_df is not None:
                 f.write("Precision/Recall Metrics:\n")
-                f.write(metrics_df.to_string(index=False))
+                f.write("For each risk factor, true positives (TP), false positives (FP), "
+                    "false negatives (FN), true negatives (TN),\n")
+                f.write("precision (TP / (TP + FP)), "
+                    "recall (TP / (TP + FN)), F1 (2 * (precision * recall) / (precision + recall)),\n")
+                f.write(
+                    "and whether the rule meets the target thresholds.\n\n")
+                display_cols = [c for c in metrics_df.columns if c not in ("FN_ids", "FP_ids")]
+                f.write(metrics_df[display_cols].to_string(index=False))
                 f.write("\n\n")
+                overall_precision = metrics_df["precision"].mean()
+                overall_recall = metrics_df["recall"].mean()
+                f.write(f"Overall mean precision: {overall_precision:.3f}\n")
+                f.write(f"Overall mean recall: {overall_recall:.3f}\n")
                 # meets_*_target is None ("N/A") wherever the metric was undefined
                 # (0/0 — no positive predictions and/or no actual positives); treat
                 # that as "not evaluable", not as a failure.
@@ -588,6 +611,7 @@ class RuleEvaluator:
                 failed_recall = metrics_df[metrics_df["meets_recall_target"] == False]  # noqa: E712
                 na_precision = metrics_df[metrics_df["meets_precision_target"].isna()]
                 na_recall = metrics_df[metrics_df["meets_recall_target"].isna()]
+                f.write("\nPass/Fail Summary: {} out of {} rules meet their targets.\n".format(len(metrics_df) - len(failed_precision) - len(failed_recall), len(metrics_df)))
                 f.write(f"Rules failing precision target ({self.cfg.target_precision}):\n")
                 f.write(failed_precision[["risk_factor", "precision"]].to_string(index=False))
                 f.write("\n\n")
@@ -639,7 +663,19 @@ class RuleEvaluator:
             else:
                 f.write("- Skipped: no ID column or has_* features found.\n")
 
-        self.log.info(f"Saved validation report: {validation_report_path}")
+            if metrics_df is not None:
+                join_col = metrics_df.attrs.get("join_col", "ID")
+                f.write(f"\nFalse Negatives / False Positives by Risk Factor (ID column: {join_col}):\n")
+                errors = metrics_df[(metrics_df["FN"] > 0) | (metrics_df["FP"] > 0)]
+                if errors.empty:
+                    f.write("- No false negatives or false positives.\n")
+                else:
+                    for row in errors.itertuples():
+                        f.write(f"- {row.risk_factor}:\n")
+                        f.write(f"    FN ({row.FN}): {row.FN_ids or '-'}\n")
+                        f.write(f"    FP ({row.FP}): {row.FP_ids or '-'}\n")
+
+        self.log.debug(f"Saved validation report: {validation_report_path}")
         return validation_report_path
 
     # ------------------------------------------------------------------
