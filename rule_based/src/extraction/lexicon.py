@@ -6,7 +6,7 @@ The lexicon is a structured CSV/YAML that maps MRSA risk factors to their
 clinical context, ICD codes, drug names, free-text keywords, and abbreviations.
 This module loads, validates, and exposes the lexicon to the RuleExtractor.
 
-Lexicon CSV columns (see lexicons/mrsa_risk_factors_v1.csv):
+Lexicon CSV columns (see lexicons/mrsa_risk_factors_v3.csv):
     risk_factor         — short machine-readable name
     medical_context     — plain-language explanation
     icd_codes           — pipe-separated ICD-10 codes (optional)
@@ -88,7 +88,7 @@ class LexiconConfig:
         Log extra detail about each loaded entry.
     """
 
-    lexicon_path: Path = Path("lexicons/mrsa_risk_factors_v1.csv")
+    lexicon_path: Path = Path("lexicons/mrsa_risk_factors_v3.csv")
     csv_separator: str = ";"
     separator: str = "|"
     validate_on_load: bool = True

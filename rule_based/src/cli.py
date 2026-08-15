@@ -157,7 +157,7 @@ def annotate_gold_standard(
         help="Directory with the raw note chunk_*.parquet files to annotate.",
     ),
     lexicon_path: Path = typer.Option(
-        Path("lexicons/mrsa_risk_factors_v2.csv"),
+        Path("lexicons/mrsa_risk_factors_v3.csv"),
         help="Lexicon CSV whose risk factors become the checklist items.",
     ),
     aggregation_level: str = typer.Option(
@@ -267,7 +267,7 @@ def extract(
         help="Directory for extraction result chunks.",
     ),
     lexicon_path: Path = typer.Option(
-        Path("lexicons/mrsa_risk_factors_v1.csv"),
+        Path("lexicons/mrsa_risk_factors_v3.csv"),
         help="Path to the risk factor lexicon CSV.",
     ),
     negation_window: int = typer.Option(5, help="Negation look-back window (tokens)."),
@@ -418,7 +418,7 @@ def run_rule_pipeline(
         Path("data/interim/airms/notes/all/cohort_notes.parquet"),
         help="Path to the merged cohort notes Parquet file.",
     ),
-    lexicon_path: Path = typer.Option(Path("lexicons/mrsa_risk_factors_v1.csv")),
+    lexicon_path: Path = typer.Option(Path("lexicons/mrsa_risk_factors_v3.csv")),
     skip_cohort: bool = typer.Option(False, "--skip-cohort", help="Skip subset building (notes exist)."),
     skip_preprocess: bool = typer.Option(False, "--skip-preprocess"),
     skip_extract: bool = typer.Option(False, "--skip-extract"),

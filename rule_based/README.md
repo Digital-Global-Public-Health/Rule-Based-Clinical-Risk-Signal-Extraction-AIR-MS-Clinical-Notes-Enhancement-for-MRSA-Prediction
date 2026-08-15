@@ -62,7 +62,7 @@ by `mrsa_risk_predictions`.
 ┌─────────────────────────────────────────────────────────────────┐
 │  STEP 3 · Rule Extractor  (src/extraction/)                     │
 │                                                                 │
-│  Lexicon (lexicons/mrsa_risk_factors_v1.csv)                    │
+│  Lexicon (lexicons/mrsa_risk_factors_v3.csv)                    │
 │    └─ LexiconEntry: keywords · abbreviations · ICD codes        │
 │         · drug names · negation caveats                         │
 │                                                                 │
@@ -131,7 +131,7 @@ rule_based/
 ├── env/
 │   └── environment.yml          # conda env: mrsa-nlp-rule (Python 3.11)
 ├── lexicons/
-│   └── mrsa_risk_factors_v1.csv # 25 MRSA risk factors with keywords,
+│   └── mrsa_risk_factors_v3.csv # 47 MRSA risk factors with keywords,
 │                                #   ICD codes, drug names, negation notes
 ├── scripts/
 │   ├── start_airms_tunnel.sh    # open SSH tunnel to db.airms.mssm.edu
@@ -291,7 +291,7 @@ python -m src.cli preprocess \
 python -m src.cli extract \
     --preprocessed-dir data/interim/airms/notes_preprocessed \
     --out-dir          data/interim/airms/extractions \
-    --lexicon-path     lexicons/mrsa_risk_factors_v1.csv \
+    --lexicon-path     lexicons/mrsa_risk_factors_v3.csv \
     --negation-window  5 \
     --no-debug
 ```
@@ -325,7 +325,7 @@ python -m src.cli evaluate \
 
 ## Lexicon
 
-`lexicons/mrsa_risk_factors_v1.csv` — 25 risk factors, columns:
+`lexicons/mrsa_risk_factors_v3.csv` — 47 risk factors, columns:
 
 | Column | Description |
 |---|---|
