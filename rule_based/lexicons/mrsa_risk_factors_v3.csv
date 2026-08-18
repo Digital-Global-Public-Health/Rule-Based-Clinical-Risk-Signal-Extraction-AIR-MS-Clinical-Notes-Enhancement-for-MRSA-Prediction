@@ -1,4 +1,4 @@
-Risk Factor ;Medical Context ;ICD Codes;Drug Names ;Keywords ;Abbreviations ;Negation Caveats;Reference
+Risk Factor ;Medical Context ;ICD Codes;Drug Names ;Keywords ;Abbreviations ;Notes;Reference
 Adm from ED;"Disease severity marker; high MRSA colonization environment";-;-;emergency room | emergency department;ER | ED;;
 Advanced Age;Age-related immune decline;-;-;elderly | geriatric | nonagenarian | octogenarian | advanced age | 6[5-9][\s-]?y\.?\s?/?\s?o\.?[mf]? | [7-9]\d[\s-]?y\.?\s?/?\s?o\.?[mf]? | 6[5-9][\s-]?years?[\s-]?old | [7-9]\d[\s-]?years?[\s-]?old;-;;https://www.sciencedirect.com/science/chapter/bookseries/abs/pii/S0065277608600474, https://pmc.ncbi.nlm.nih.gov/articles/PMC10111773/, https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1447-0594.2006.00341.x
 Albumin Measurement;Indicator for inflammation;-;-;ALBUMIN(?:,?\s*BLD)?\s*\d+;-;;
@@ -14,7 +14,7 @@ Diabetes Mellitus;Hyperglycemia impairs neutrophil function and wound healing;E1
 Difficulty swallowing;Raised aspiration risk;R13.1;-;dysphagia | difficulty swallowing | limited ability to initiate swallowing;-;;
 Foley Catheter;Infection portal;-;-;urine catheter | foley catheter | indwelling catheter | catheter-associated UTI | foley;IUC | CAUTI;;
 Glucose Measurement;Indicator for inflammation;-;-;GLUCOSE(?:-?,?VEN\s*(?:\(?POCT\)?)?)?\s*\d+;-;;
-Hematologic Malignancy;Disease- and treatment-related neutropenia and immune dysregulation;C81 | C82 | C83 | C84 | C85 | C90 | C91 | C92 | C93 | C94 | C95;-;hematologic malignancy | blood cancer | leukemia | myeloma | lymphoma;AML | ALL | CLL | CML | NHL;;
+Hematologic Malignancy;Disease- and treatment-related neutropenia and immune dysregulation;C81 | C82 | C83 | C84 | C85 | C90 | C91 | C92 | C93 | C94 | C95;-;hematologic malignancy | blood cancer | leukemia | myeloma | lymphoma;AML | CLL | CML | NHL;;
 Hemodialysis;Vascular access for hemodialysis is recurrent infection portal;Z99.2;-;ha?emodialysis | dialyzer | AV fistulas | AV graft | shunt;HD;;https://www.niddk.nih.gov/health-information/kidney-disease/kidney-failure/hemodialysis
 Hemoglobin Measurement;Indicator for inflammation;-;-;HEMOGLOBIN(?:\s*A1C)?\s*\d+;Hgb\s*\d+;;
 HIV AIDS;CD4-mediated immunodeficiency;B20;-;human immunodeficiency virus | HIV | AIDS | acquired immunodeficiency syndrome;HIV | ART | NRTI | NNRTI | HAART;;https://hivinfo.nih.gov/understanding-hiv/fact-sheets/fda-approved-hiv-medicines
