@@ -659,7 +659,7 @@ class RuleEvaluator:
                 else:
                     for _, row in examples.iterrows():
                         fired = [c for c in binary_cols if row[c] == 1]
-                        f.write(f"- {id_col}={row[id_col].astype(int)}: {', '.join(fired)}\n")
+                        f.write(f"- {id_col}={row[id_col]}: {', '.join(fired)}\n")
             else:
                 f.write("- Skipped: no ID column or has_* features found.\n")
 

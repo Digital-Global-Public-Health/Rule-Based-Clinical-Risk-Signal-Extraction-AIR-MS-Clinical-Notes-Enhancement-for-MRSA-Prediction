@@ -161,7 +161,7 @@ def annotate_gold_standard(
         help="Lexicon CSV whose risk factors become the checklist items.",
     ),
     aggregation_level: str = typer.Option(
-        "visit",
+        "person",
         help="Aggregation level for the gold-standard CSV: 'visit' or 'person'.",
     ),
     checklist_dir: Path = typer.Option(
@@ -316,7 +316,7 @@ def extract(
 # 4. aggregate-features
 # ---------------------------------------------------------------------------
 
-@app.command(help="Aggregate per-note extractions to visit-level feature matrix.")
+@app.command(help="Aggregate per-note extractions to person-level feature matrix.")
 @log_timing
 def aggregate_features(
     extractions_dir: Path = typer.Option(
@@ -327,13 +327,13 @@ def aggregate_features(
         Path("data/interim/airms/mrsa_cohort_person_list.csv"),
         help="Cohort person list (PERSON_ID, MRN, LABEL).",
     ),
-    level: str = typer.Option("visit", help="Aggregation level: 'visit' or 'person'."),
+    level: str = typer.Option("person", help="Aggregation level: 'visit' or 'person'."),
     debug: bool = typer.Option(False, "--debug/--no-debug"),
 ) -> None:
     """
     Pipeline Step 4 — Feature engineering and aggregation.
 
-    Aggregates per-note extraction counts to visit level, merges with cohort
+    Aggregates per-note extraction counts to person level, merges with cohort
     labels, and saves a training-ready CSV.
     """
     _, run_dir = make_run_dir("feature_aggregation")

@@ -25,7 +25,7 @@ EXTRACTIONS_DIR="data/interim/airms/extractions"
 COHORT_PATH="data/interim/airms/mrsa_cohort_person_list.csv"
 LEXICON_PATH="lexicons/mrsa_risk_factors_v3.csv"
 NEGATION_WINDOW=5
-LEVEL="visit"
+LEVEL="person"
 DEBUG=false
 DEBUG_N_NOTES=200
 

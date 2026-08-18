@@ -67,7 +67,7 @@ class AggregatorConfig:
         "data/interim/airms/mrsa_cohort_person_list.csv"
     )
     out_dir: Path = Path("outputs")
-    aggregation_level: str = "visit"
+    aggregation_level: str = "person"
     include_binary_features: bool = True
     include_count_features: bool = True
     include_note_type_breakdown: bool = False
@@ -92,7 +92,7 @@ def _safe_mode(series: pd.Series):
 
 class FeatureAggregator:
     """
-    Transforms per-note extraction results into a visit-level feature matrix.
+    Transforms per-note extraction results into a person-level feature matrix.
 
     Parameters
     ----------

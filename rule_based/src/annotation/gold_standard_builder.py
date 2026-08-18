@@ -70,7 +70,7 @@ class GoldStandardConfig:
 
     input_dir: Path = Path("data/interim/airms/notes")
     lexicon_path: Path = Path("lexicons/mrsa_risk_factors_v3.csv")
-    aggregation_level: str = "visit"
+    aggregation_level: str = "person"
     checklist_dir: Path = Path("data/annotations/checklists")
     output_file: Path = Path("data/annotations/gold_standard.csv")
     editor: Optional[str] = None

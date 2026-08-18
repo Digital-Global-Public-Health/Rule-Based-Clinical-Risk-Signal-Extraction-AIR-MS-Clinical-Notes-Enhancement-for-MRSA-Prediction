@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MRSA risk indicators derived from study on AIR.MS dataset.
 - Lessons learned.
 
+### Changed
+
+- Default settings to usage of lexicon version 3 and person-level for the final feature matrix (resulting by pipeline and gold standard builder).
+
 ### Fixed
 
 - Data type of IDs in validation report output.
