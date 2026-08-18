@@ -107,7 +107,6 @@ CLINICAL_ABBREVIATIONS: Dict[str, str] = {
     r"\bCVC\b":     "central venous catheter",
     r"\bPICC\b":    "peripherally inserted central catheter",
     r"\bHD\b":      "hemodialysis",
-    r"\bPD\b":      "peritoneal dialysis",
     r"\bAbx\b":     "antibiotics",
     r"\bVanc\b":    "vancomycin",
     r"\bPCN\b":     "penicillin",
