@@ -96,7 +96,6 @@ CLINICAL_ABBREVIATIONS: Dict[str, str] = {
     r"\bICU\b":     "intensive care unit",
     r"\bSNF\b":     "skilled nursing facility",
     r"\bNH\b":      "nursing home",
-    r"\bRA\b":      "rheumatoid arthritis",
     r"\bSLE\b":     "systemic lupus erythematosus",
     r"\bHIV\b":     "human immunodeficiency virus",
     r"\bAIDS\b":    "acquired immunodeficiency syndrome",
