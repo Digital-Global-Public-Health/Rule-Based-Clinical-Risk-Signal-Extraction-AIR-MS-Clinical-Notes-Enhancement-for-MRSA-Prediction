@@ -415,7 +415,7 @@ def evaluate(
 @log_timing
 def run_rule_pipeline(
     notes_path: Path = typer.Option(
-        Path("data/interim/airms/notes/all/cohort_notes.parquet"),
+        Path("/sc/arion/projects/MRSA-HPI-MS/airms-app-host-and-hospital-adaptation-of-mrsa/mrsa_nlp/rule_based/data/interim/airms/notes/all/cohort_notes.parquet"),
         help="Path to the merged cohort notes Parquet file.",
     ),
     lexicon_path: Path = typer.Option(Path("lexicons/mrsa_risk_factors_v3.csv")),
