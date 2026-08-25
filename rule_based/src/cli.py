@@ -217,22 +217,19 @@ def preprocess(
     ),
     lowercase: bool = typer.Option(True, "--lowercase/--no-lowercase"),
     expand_abbrev: bool = typer.Option(True, "--expand-abbrev/--no-expand-abbrev"),
-    segment: bool = typer.Option(False, "--segment/--no-segment"),
     debug: bool = typer.Option(False, "--debug/--no-debug"),
     debug_n_notes: int = typer.Option(200),
 ) -> None:
     """
     Pipeline Step 2 — Preprocess raw note chunks.
 
-    Applies whitespace normalisation, abbreviation expansion, and optional
-    section segmentation.  Skips already-processed chunks (resume-safe).
+    Applies whitespace normalization, abbreviation expansion.  Skips already-processed chunks (resume-safe).
     """
     cfg = PreprocessorConfig(
         raw_notes_dir=raw_notes_dir,
         out_dir=out_dir,
         lowercase=lowercase,
         expand_abbreviations=expand_abbrev,
-        segment_sections=segment,
         debug=debug,
         debug_n_notes=debug_n_notes,
     )

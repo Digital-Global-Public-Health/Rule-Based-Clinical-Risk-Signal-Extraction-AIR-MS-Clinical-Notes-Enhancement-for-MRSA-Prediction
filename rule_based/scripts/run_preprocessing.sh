@@ -59,7 +59,7 @@ if [[ "$DEBUG" == "true" ]]; then
         preprocess \
         --raw-notes-dir "$RAW_NOTES_DIR" \
         --out-dir "$OUT_DIR" \
-        --lowercase --expand-abbrev --no-segment \
+        --lowercase --expand-abbrev \
         --debug --debug-n-notes "$DEBUG_N_NOTES"
 else
     python -m src.cli \
@@ -67,7 +67,7 @@ else
         preprocess \
         --raw-notes-dir "$RAW_NOTES_DIR" \
         --out-dir "$OUT_DIR" \
-        --lowercase --expand-abbrev --no-segment \
+        --lowercase --expand-abbrev \
         --no-debug
 fi
 

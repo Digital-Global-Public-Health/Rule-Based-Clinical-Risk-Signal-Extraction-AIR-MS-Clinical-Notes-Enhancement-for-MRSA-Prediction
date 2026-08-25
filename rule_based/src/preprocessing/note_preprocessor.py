@@ -3,8 +3,7 @@
 Preprocessing pipeline for raw clinical notes.
 
 This module loads the raw note chunks produced by the cohort builder and
-applies text-normalisation steps (cleaning, abbreviation expansion, optional
-section segmentation) before rule-based extraction.
+applies text-normalisation steps (cleaning, abbreviation expansion) before rule-based extraction.
 
 Input  : data/interim/airms/notes/chunk_*.parquet
 Output : data/interim/airms/notes_preprocessed/chunk_*.parquet
@@ -53,9 +52,6 @@ class PreprocessorConfig:
     expand_abbreviations : bool
         Replace clinical shorthand (e.g. "s/p" → "status post") using the
         built-in abbreviation map.
-    segment_sections : bool
-        Attempt to identify common clinical note sections
-        (HPI, Assessment, Plan, Medications, etc.).
     keep_original_text : bool
         If True, retain the original NOTE_TEXT alongside the cleaned version.
     debug : bool
@@ -71,7 +67,6 @@ class PreprocessorConfig:
     lowercase: bool = True
     remove_extra_whitespace: bool = True
     expand_abbreviations: bool = True
-    segment_sections: bool = False
     keep_original_text: bool = False
     debug: bool = False
     debug_n_notes: int = 200
@@ -276,36 +271,6 @@ class NotePreprocessor:
 
         return expanded
 
-    def segment_sections(self, text: str) -> Dict[str, str]:
-        """
-        Attempt to split a clinical note into labelled sections.
-
-        Parameters
-        ----------
-        text : str
-            Cleaned note text.
-
-        Returns
-        -------
-        dict of {str: str}
-            Keys are section labels (e.g. "HPI", "MEDICATIONS", "ASSESSMENT",
-            "PLAN", "PMH", "ALLERGIES", "REVIEW_OF_SYSTEMS").
-            Values are the corresponding section text.
-            The special key "FULL_TEXT" always holds the entire cleaned text.
-
-        Notes
-        -----
-        - Use a list of common section header patterns (regex) to identify
-          section boundaries.
-        - If a section is not found, its key is absent from the dict.
-        - This is an optional enrichment step — downstream rules can operate
-          on section-specific text to reduce false positives (e.g. looking
-          for "penicillin" only in the MEDICATIONS section rather than in
-          the ALLERGIES section).
-        """
-        # TODO: implement a simple regex-based section segmentation method.
-        return {"FULL_TEXT": text}
-
     # ------------------------------------------------------------------
     # Note-level processing
     # ------------------------------------------------------------------
@@ -436,9 +401,8 @@ class NotePreprocessor:
         1. filter_notes(df)
         2. Apply process_note_text() to each row's NOTE_TEXT
            (store result in NOTE_TEXT_CLEAN).
-        3. Optionally add a NOTE_SECTIONS column (dict) if cfg.segment_sections.
-        4. Optionally drop NOTE_TEXT column if not cfg.keep_original_text.
-        5. deduplicate_notes()
+        3. Optionally drop NOTE_TEXT column if not cfg.keep_original_text.
+        4. deduplicate_notes()
 
         Parameters
         ----------
@@ -452,9 +416,6 @@ class NotePreprocessor:
         """
         filtered_notes = self.filter_notes(df)
         filtered_notes["NOTE_TEXT_CLEAN"] = filtered_notes["NOTE_TEXT"].apply(self.process_note_text)
-
-        if self.cfg.segment_sections:
-            filtered_notes["NOTE_SECTIONS"] = filtered_notes["NOTE_TEXT_CLEAN"].apply(self.segment_sections)
 
         dedup_notes = self.deduplicate_notes(filtered_notes)
 
