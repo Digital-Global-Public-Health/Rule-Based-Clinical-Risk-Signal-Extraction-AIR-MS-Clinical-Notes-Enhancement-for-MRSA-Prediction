@@ -12,14 +12,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changelog for validation phase.
 - MRSA risk indicators derived from study on AIR.MS dataset.
 - Lessons learned.
+- DATA_DICTIONAIRY.md with explanation of each output columns of the feature matrix resulting from feature aggregation.
+- Missing risk signal descriptions and examples to RULES.md.
 
 ### Changed
 
 - Default settings to usage of lexicon version 3 and person-level for the final feature matrix (resulting by pipeline and gold standard builder).
+- Explanations and setup guideline in README.md.
 
 ### Fixed
 
 - Data type of IDs in validation report output.
+
+### Removed
+
+- Placeholder for segment section.
 
 ## [0.2.0] - 2026-07-28
 
