@@ -172,7 +172,7 @@ rule_based/
 ├── lessons_learned.md           # what worked, what didn't, how to interpret output
 ├── requirements.txt
 ├── env/
-│   └── environment.yml          # conda env: mrsa-nlp-rule (Python 3.11)
+│   └── environment.yml          # conda env: mrsa-nlp-rule (Python 3.10)
 ├── lexicons/
 │   ├── mrsa_risk_factors_v1.csv # lexicon version history (v1 → v3)
 │   ├── mrsa_risk_factors_v2.csv
@@ -202,8 +202,6 @@ rule_based/
 │   │   └── feature_aggregator.py # AggregatorConfig + FeatureAggregator
 │   ├── evaluation/
 │   │   └── evaluator.py         # EvaluatorConfig + RuleEvaluator
-│   └── statistics/
-│       └── cohort_statistics.py # analysis and visualization
 ├── data/
 │   ├── interim/airms/
 │   │   ├── notes/               # raw note chunks
@@ -211,7 +209,6 @@ rule_based/
 │   │   └── extractions/         # per-note feature chunks
 │   └── annotations/             # gold-standard annotation working files
 ├── outputs/                     # timestamped run directories, statistics output
-├── .env.example                 # copy to .env and fill credentials
 └── .gitignore
 ```
 
