@@ -9,6 +9,8 @@ from pathlib import Path
 from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
+from src.utils_io import ensure_dir
+
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*pandas.*')
 logger = logging.getLogger("mrsa_nlp.rule")
 
@@ -43,8 +45,9 @@ def configure_logging(
 
     Notes
     -----
-    Calling this function more than once in the same process is a no-op —
-    the cached run directory is returned unchanged.
+    Calling this function more than once in the same process reuses the
+    existing run directory and handlers instead of creating new ones, but
+    still applies *level* to the root logger and all existing handlers.
     """
     global LOG_RUN_DIR
 
@@ -52,6 +55,8 @@ def configure_logging(
     if root.handlers and LOG_RUN_DIR is not None:
         numeric = getattr(logging, level.upper(), logging.INFO)
         root.setLevel(numeric)
+        for h in root.handlers:
+            h.setLevel(numeric)
         logger.info("Logging already configured; reusing run dir %s", LOG_RUN_DIR)
         return LOG_RUN_DIR
 
@@ -60,7 +65,7 @@ def configure_logging(
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     run_dir = base_dir / f"{run_name}_{timestamp}"
-    run_dir.mkdir(parents=True, exist_ok=True)
+    ensure_dir(run_dir)
 
     log_path = run_dir / "run.log"
     numeric = getattr(logging, level.upper(), logging.INFO)
@@ -106,7 +111,7 @@ def make_run_dir(
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     run_id = f"{prefix}_{ts}"
     run_dir = base_dir / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
+    ensure_dir(run_dir)
     return run_id, run_dir
 
 

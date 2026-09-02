@@ -23,6 +23,7 @@ def write_parquet(df: pd.DataFrame, p: Path) -> None:
     strict schema inference.
     """
     ensure_dir(p.parent)
+    df = df.copy()
     for col in df.columns:
         if df[col].dtype == "object" and df[col].isna().all():
             df[col] = df[col].astype("string")

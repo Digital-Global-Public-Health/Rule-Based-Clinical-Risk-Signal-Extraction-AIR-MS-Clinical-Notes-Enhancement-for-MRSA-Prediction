@@ -3,8 +3,9 @@
 Window-based and NegEx-inspired negation detection.
 
 When a rule matches a keyword in a clinical note, this module checks whether
-the match is preceded by negation cues (e.g. "no", "denies", "without") within
-a configurable token window.  A negated match is suppressed (not counted as a
+the match is preceded by pre-negation cues (e.g. "no", "denies", "without")
+or followed by post-negation cues (e.g. "ruled out", "denied") within a
+configurable token window.  A negated match is suppressed (not counted as a
 positive mention of the risk factor).
 
 Reference
@@ -27,7 +28,7 @@ LOG = logging.getLogger("mrsa_nlp.rule.negation")
 # Default negation cue list  (extend as needed)
 # ---------------------------------------------------------------------------
 
-DEFAULT_NEGATION_CUES: List[str] = [
+DEFAULT_PRE_NEGATION_CUES: List[str] = [
     "no",
     "not",
     "without",
@@ -52,6 +53,15 @@ DEFAULT_NEGATION_CUES: List[str] = [
     "nor",
 ]
 
+DEFAULT_POST_NEGATION_CUES: List[str] = [
+    "not",
+    "no",
+    "denied",
+    "ruled out",
+    "doubt",
+    "negative",
+]
+
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -65,10 +75,13 @@ class NegationConfig:
     Attributes
     ----------
     window_tokens : int
-        Number of tokens to look back before a match for negation cues.
+        Number of tokens to look back before a match (pre-negation cues)
+        and to look ahead after a match (post-negation cues).
         Default of 5 follows the NegEx heuristic.
-    negation_cues : list of str, optional
-        Custom list of negation cues.  None uses DEFAULT_NEGATION_CUES.
+    negation_cues_pre : list of str, optional
+        Custom list of negation cues to look for before a match.  None uses DEFAULT_PRE_NEGATION_CUES.
+    negation_cues_post : list of str, optional
+        Custom list of negation cues to look for after a match.  None uses DEFAULT_POST_NEGATION_CUES.
     use_sentence_boundary : bool
         If True, the search window does not cross sentence boundaries
         (detected by "." or newlines).
@@ -77,7 +90,8 @@ class NegationConfig:
     """
 
     window_tokens: int = 5
-    negation_cues: List[str] = field(default_factory=lambda: list(DEFAULT_NEGATION_CUES))
+    negation_cues_pre: List[str] = field(default_factory=lambda: list(DEFAULT_PRE_NEGATION_CUES))
+    negation_cues_post: List[str] = field(default_factory=lambda: list(DEFAULT_POST_NEGATION_CUES))
     use_sentence_boundary: bool = True
     debug: bool = False
 
@@ -102,7 +116,7 @@ class NegationHandler:
     >>> from src.extraction.negation_handler import NegationConfig, NegationHandler
     >>> handler = NegationHandler(NegationConfig())
     >>> text = "The patient has no prior MRSA colonization."
-    >>> is_neg = handler.is_negated(text, match_start=26, match_end=41)
+    >>> is_neg = handler.is_negated(text, match_start=25, match_end=42)
     >>> assert is_neg  # should be True
     """
 
@@ -113,7 +127,8 @@ class NegationHandler:
     ) -> None:
         self.cfg = config
         self.log = logger
-        self._compiled_cues: List[re.Pattern] = []
+        self._compiled_cues_pre: List[re.Pattern] = []
+        self._compiled_cues_post: List[re.Pattern] = []
         self._compile_cues()
 
     # ------------------------------------------------------------------
@@ -131,9 +146,26 @@ class NegationHandler:
         -----
         - Multi-word cues (e.g. "no history of") are compiled as-is (they
           already span multiple tokens).
-        - Results stored in self._compiled_cues.
+        - Pre-negation cues (self.cfg.negation_cues_pre) are compiled into
+          self._compiled_cues_pre; post-negation cues
+          (self.cfg.negation_cues_post) are compiled into
+          self._compiled_cues_post.
         """
-        pass
+        for cue in self.cfg.negation_cues_pre:
+            pattern_str = r"\b" + re.escape(cue) + r"\b"
+            try:
+                compiled = re.compile(pattern_str, re.IGNORECASE)
+                self._compiled_cues_pre.append(compiled)
+            except re.error as e:
+                self.log.warning("Failed to compile negation cue '%s': %s", cue, e)
+
+        for cue in self.cfg.negation_cues_post:
+            pattern_str = r"\b" + re.escape(cue) + r"\b"
+            try:
+                compiled = re.compile(pattern_str, re.IGNORECASE)
+                self._compiled_cues_post.append(compiled)
+            except re.error as e:
+                self.log.warning("Failed to compile negation cue '%s': %s", cue, e)
 
     # ------------------------------------------------------------------
     # Core detection
@@ -165,13 +197,59 @@ class NegationHandler:
         ~~~~~~~~~
         1. Take the substring ``text[:match_start]``.
         2. If cfg.use_sentence_boundary is True, find the last sentence
-           boundary (``[.!?\\n]``) before match_start and trim the window
+           boundary (``[.;!?\\n]``) before match_start and trim the window
            to start there.
         3. Tokenise the remaining text by whitespace.
         4. Take the last ``cfg.window_tokens`` tokens.
         5. Rejoin with spaces and return.
         """
-        pass
+        substring = text[:match_start]
+        if self.cfg.use_sentence_boundary:
+            last_boundary = max(substring.rfind("."), substring.rfind(";"), substring.rfind("!"), substring.rfind("?"), substring.rfind("\n"))
+            if last_boundary != -1:
+                substring = substring[last_boundary + 1 :]
+        
+        tokens = substring.split()
+        return " ".join(tokens[-self.cfg.window_tokens:])
+
+    def _get_post_window_text(self, text: str, match_end: int) -> str:
+        """
+        Extract the window of text immediately after a keyword match.
+
+        Parameters
+        ----------
+        text : str
+            Full note text (should already be lowercased).
+        match_end : int
+            Character offset of the end of the keyword match.
+
+        Returns
+        -------
+        str
+            The post-window text slice.
+
+        Notes
+        -----
+        Algorithm
+        ~~~~~~~~~
+        1. Take the substring ``text[match_end:]``.
+        2. If cfg.use_sentence_boundary is True, find the next sentence
+           boundary (``[.,:!?\\n]``) after match_end and trim the window to
+           end there.
+        3. Tokenise the remaining text by whitespace.
+        4. Take the first ``cfg.window_tokens`` tokens.
+        5. Rejoin with spaces and return.
+        """
+        substring = text[match_end:]
+        if self.cfg.use_sentence_boundary:
+            next_boundary = min(
+                [pos for pos in (substring.find("."), substring.find(","), substring.find(";"), substring.find("!"), substring.find("?"), substring.find("\n")) if pos != -1],
+                default=len(substring)
+            )
+            substring = substring[:next_boundary]
+        
+        tokens = substring.split()
+        return " ".join(tokens[:self.cfg.window_tokens])
 
     def is_negated(
         self,
@@ -181,7 +259,8 @@ class NegationHandler:
     ) -> bool:
         """
         Return True if the keyword match at [match_start, match_end) is
-        preceded by a negation cue within the token window.
+        preceded by a pre-negation cue or followed by a post-negation cue
+        within the token window.
 
         Parameters
         ----------
@@ -190,8 +269,7 @@ class NegationHandler:
         match_start : int
             Character start offset of the matched keyword.
         match_end : int
-            Character end offset of the matched keyword (not used in the
-            look-back logic, kept for API consistency).
+            Character end offset of the matched keyword.
 
         Returns
         -------
@@ -201,11 +279,31 @@ class NegationHandler:
 
         Notes
         -----
-        - Calls _get_pre_window_text() to obtain the search region.
+        - Calls _get_pre_window_text() and _get_post_window_text() to obtain the search region.
         - Checks each compiled cue pattern against the window text.
         - If cfg.debug is True, log the window and which cue triggered.
         """
-        pass
+        pre_window = self._get_pre_window_text(text, match_start)
+        post_window = self._get_post_window_text(text, match_end)
+        for cue_pattern in self._compiled_cues_pre:
+            if cue_pattern.search(pre_window):
+                if self.cfg.debug:
+                    self.log.debug(
+                        "Negation detected: cue '%s' found in window '%s'",
+                        cue_pattern.pattern,
+                        pre_window,
+                    )
+                return True
+        for cue_pattern in self._compiled_cues_post:
+            if cue_pattern.search(post_window):
+                if self.cfg.debug:
+                    self.log.debug(
+                        "Negation detected: cue '%s' found in window '%s'",
+                        cue_pattern.pattern,
+                        post_window,
+                    )
+                return True
+        return False
 
     def filter_negated(
         self,
@@ -233,4 +331,8 @@ class NegationHandler:
         - Calls is_negated() for each match.
         - Logs how many matches were suppressed when cfg.debug is True.
         """
-        pass
+        filtered_matches = [m for m in matches if not self.is_negated(text, m[0], m[1])]
+        if self.cfg.debug:
+            num_removed = len(matches) - len(filtered_matches)
+            self.log.debug("Negation filtering: %d of %d matches removed.", num_removed, len(matches))
+        return filtered_matches

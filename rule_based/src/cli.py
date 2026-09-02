@@ -6,8 +6,8 @@ Usage (from project root, with conda env activated):
 
     python -m src.cli --help
 
-    # Step 1 — build cohort + mine notes
-    python -m src.cli build-cohort [OPTIONS]
+    # Step 1 — build subset
+    python -m src.cli build-subset [OPTIONS]
 
     # Step 2 — preprocess raw notes
     python -m src.cli preprocess [OPTIONS]
@@ -35,9 +35,9 @@ import warnings
 from rich import print
 
 from src.utils_logging import configure_logging, logger, make_run_dir, save_config_snapshot, log_timing
-from src.utils_db import connect_hana
 from src.utils_seed import set_seed, GLOBAL_SEED
-from src.cohort.cohort_builder import CohortConfig, CohortBuilder
+from src.cohort.subset_builder import SubsetConfig, SubsetBuilder
+from src.annotation.gold_standard_builder import GoldStandardConfig, GoldStandardBuilder
 from src.preprocessing.note_preprocessor import PreprocessorConfig, NotePreprocessor
 from src.extraction.lexicon import LexiconConfig, Lexicon
 from src.extraction.negation_handler import NegationConfig, NegationHandler
@@ -77,51 +77,127 @@ def _configure(
 
 
 # ---------------------------------------------------------------------------
-# 1. build-cohort
+# 1. build-subset
 # ---------------------------------------------------------------------------
 
-@app.command(help="Load the MRSA cohort from mrsa_risk_predictions and mine notes from CDMPHI.NOTES.")
+@app.command(help="Build the MRSA cases-subset from the cohort notes parquet.")
 @log_timing
-def build_cohort(
-    schema: str = typer.Option("CDMPHI", help="HANA schema name."),
-    chunk_size: int = typer.Option(500, help="Persons per note-mining chunk."),
-    min_note_date: str = typer.Option("2014-07-14", help="Earliest note date (YYYY-MM-DD)."),
+def build_subset(
+    notes_path: Path = typer.Option(
+        Path("/sc/arion/projects/MRSA-HPI-MS/airms-app-host-and-hospital-adaptation-of-mrsa/mrsa_nlp/rule_based/data/interim/airms/notes/all/cohort_notes.parquet"),
+        help="Path to the merged cohort notes Parquet file.",
+    ),
+    cohort_csv_path: Optional[Path] = typer.Option(
+        Path("/sc/arion/projects/MRSA-HPI-MS/airms-app-host-and-hospital-adaptation-of-mrsa/mrsa_nlp/rule_based/data/interim/airms/cohort_subset.csv"),
+        help="Optional CSV file with PERSON_ID and LABEL columns for person-ID filtering.",
+    ),
+    selected_labels: str = typer.Option(
+        "1",
+        help="Comma-separated labels to include (e.g. '1' for cases only, '0,1' for all).",
+    ),
+    selected_note_titles: str = typer.Option(
+        "H&P, Progress Notes, Discharge Summary, Consults",
+        help="Comma-separated note titles to include (e.g. 'Discharge Summary' or 'Progress Notes').",
+    ),
+    out_dir: Path = typer.Option(
+        Path("data/interim/airms/notes"),
+        help="Directory for filtered subset note chunks.",
+    ),
+    chunk_size: int = typer.Option(1, help="Notes per output Parquet chunk."),
+    n_patients: Optional[int] = typer.Option(None, help="Maximum number of unique patients to include."),
+    n_notes_per_type: Optional[int] = typer.Option(None, help="Maximum number of notes per note title to include."),
     debug: bool = typer.Option(False, "--debug/--no-debug", help="Debug mode: limit to a small sample."),
-    debug_n_persons: int = typer.Option(20, help="Persons to process in debug mode."),
-    seed: int = typer.Option(GLOBAL_SEED, "--seed", help=f"Random seed (passed to mrsa_risk_predictions cohort loader; default: {GLOBAL_SEED})."),
+    debug_n_rows: int = typer.Option(100, help="Rows kept in the subset when --debug is set."),
 ) -> None:
     """
-    Pipeline Step 1 — Build cohort and mine clinical notes.
+    Pipeline Step 1 — Build note subset.
 
-    Reads the matched-pairs cohort from mrsa_risk_predictions, resolves MRNs,
-    saves mrsa_cohort_person_list.parquet, then fetches notes from CDMPHI.NOTES
-    in person-level chunks.
-
-    The seed is used in the underlying cohort builder for reproducible control sampling.
+    Filters the merged cohort notes parquet by person ID (optional CSV filter)
+    and note title, then saves the filtered notes to chunked Parquet files.
     """
-    cfg = CohortConfig(
-        schema=schema,
+    labels = [int(label.strip()) for label in selected_labels.split(",")]
+    note_titles = [t.strip() for t in selected_note_titles.split(",") if t.strip()]
+    cfg = SubsetConfig(
+        mrsa_cohort_notes_path=str(notes_path),
+        person_id_column="PERSON_ID",
+        person_ids_csv_path=str(cohort_csv_path) if cohort_csv_path else None,
+        person_ids_csv_column="PERSON_ID",
+        person_ids_csv_label_column="LABEL",
+        selected_labels=labels,
+        note_title_column="NOTE_TITLE",
+        selected_note_titles=note_titles,
+        output_path=str(out_dir),
         chunk_size=chunk_size,
-        min_note_date=min_note_date,
+        n_patients=n_patients,
+        n_notes_per_type=n_notes_per_type,
         debug=debug,
-        debug_n_persons=debug_n_persons,
+        debug_n_rows=debug_n_rows,
     )
 
     save_config_snapshot(
-        cfg.__dict__ | {"pipeline_step": "build_cohort"},
+        cfg.__dict__ | {"pipeline_step": "build_subset"},
         run_dir=_current_run_dir(),
     )
 
-    conn = connect_hana()
-    builder = CohortBuilder(cfg, conn)
-    person_df = builder.run()
+    builder = SubsetBuilder(cfg, run_dir=_current_run_dir())
+    builder.run()
 
-    # logger.info(
-    #     "Cohort built: %d persons  (%d cases, %d controls)",
-    #     len(person_df),
-    #     (person_df["LABEL"] == 1).sum() if person_df is not None else 0,
-    #     (person_df["LABEL"] == 0).sum() if person_df is not None else 0,
-    # )
+
+# ---------------------------------------------------------------------------
+# 1b. annotate-gold-standard (interactive, not part of run-rule-pipeline)
+# ---------------------------------------------------------------------------
+
+@app.command(
+    name="annotate-gold-standard",
+    help="Interactively annotate a note subset to build a gold-standard CSV.",
+)
+def annotate_gold_standard(
+    input_dir: Path = typer.Option(
+        Path("data/interim/airms/notes"),
+        help="Directory with the raw note chunk_*.parquet files to annotate.",
+    ),
+    lexicon_path: Path = typer.Option(
+        Path("lexicons/mrsa_risk_factors_v3.csv"),
+        help="Lexicon CSV whose risk factors become the checklist items.",
+    ),
+    aggregation_level: str = typer.Option(
+        "person",
+        help="Aggregation level for the gold-standard CSV: 'visit' or 'person'.",
+    ),
+    checklist_dir: Path = typer.Option(
+        Path("data/annotations/checklists"),
+        help="Directory for the per-note working checklist files.",
+    ),
+    output_file: Path = typer.Option(
+        Path("data/annotations/gold_standard.csv"),
+        help="Path of the final merged gold-standard CSV.",
+    ),
+    editor: Optional[str] = typer.Option(
+        None, help="Editor command to open each checklist. Defaults to $EDITOR, then 'vi'.",
+    ),
+    force_reannotate: bool = typer.Option(
+        False, help="Recreate and reopen checklists that already exist instead of skipping them.",
+    ),
+) -> None:
+    """
+    Interactive gold-standard annotation.
+
+    Prints each note to stdout and opens its per-note checklist in an
+    editor for manual review, then merges all checklists into a single
+    gold-standard CSV consumable by the `evaluate` command. Requires human
+    interaction, so it is not part of `run-rule-pipeline`.
+    """
+    cfg = GoldStandardConfig(
+        input_dir=input_dir,
+        lexicon_path=lexicon_path,
+        checklist_dir=checklist_dir,
+        output_file=output_file,
+        editor=editor,
+        force_reannotate=force_reannotate,
+        aggregation_level=aggregation_level,
+    )
+    builder = GoldStandardBuilder(cfg)
+    builder.run()
 
 
 # ---------------------------------------------------------------------------
@@ -141,28 +217,30 @@ def preprocess(
     ),
     lowercase: bool = typer.Option(True, "--lowercase/--no-lowercase"),
     expand_abbrev: bool = typer.Option(True, "--expand-abbrev/--no-expand-abbrev"),
-    segment: bool = typer.Option(False, "--segment/--no-segment"),
     debug: bool = typer.Option(False, "--debug/--no-debug"),
     debug_n_notes: int = typer.Option(200),
 ) -> None:
     """
     Pipeline Step 2 — Preprocess raw note chunks.
 
-    Applies whitespace normalisation, abbreviation expansion, and optional
-    section segmentation.  Skips already-processed chunks (resume-safe).
+    Applies whitespace normalization, abbreviation expansion.  Skips already-processed chunks (resume-safe).
     """
     cfg = PreprocessorConfig(
         raw_notes_dir=raw_notes_dir,
         out_dir=out_dir,
         lowercase=lowercase,
         expand_abbreviations=expand_abbrev,
-        segment_sections=segment,
         debug=debug,
         debug_n_notes=debug_n_notes,
     )
 
+    snapshot = {
+        k: str(v) if isinstance(v, Path) else v
+        for k, v in cfg.__dict__.items()
+    }
+
     save_config_snapshot(
-        cfg.__dict__ | {"pipeline_step": "preprocess"},
+        snapshot | {"pipeline_step": "preprocess"},
         run_dir=_current_run_dir(),
     )
 
@@ -186,7 +264,7 @@ def extract(
         help="Directory for extraction result chunks.",
     ),
     lexicon_path: Path = typer.Option(
-        Path("lexicons/mrsa_risk_factors_v1.csv"),
+        Path("lexicons/mrsa_risk_factors_v3.csv"),
         help="Path to the risk factor lexicon CSV.",
     ),
     negation_window: int = typer.Option(5, help="Negation look-back window (tokens)."),
@@ -217,8 +295,13 @@ def extract(
         debug_n_notes=debug_n_notes,
     )
 
+    snapshot = {
+        k: str(v) if isinstance(v, Path) else v
+        for k, v in ext_cfg.__dict__.items()
+    }
+
     save_config_snapshot(
-        ext_cfg.__dict__ | {"pipeline_step": "extract"},
+        snapshot | {"pipeline_step": "preprocess"},
         run_dir=_current_run_dir(),
     )
 
@@ -230,7 +313,7 @@ def extract(
 # 4. aggregate-features
 # ---------------------------------------------------------------------------
 
-@app.command(help="Aggregate per-note extractions to visit-level feature matrix.")
+@app.command(help="Aggregate per-note extractions to person-level feature matrix.")
 @log_timing
 def aggregate_features(
     extractions_dir: Path = typer.Option(
@@ -238,16 +321,16 @@ def aggregate_features(
         help="Directory of extraction chunk Parquet files.",
     ),
     cohort_path: Path = typer.Option(
-        Path("data/interim/airms/mrsa_cohort_person_list.parquet"),
+        Path("data/interim/airms/mrsa_cohort_person_list.csv"),
         help="Cohort person list (PERSON_ID, MRN, LABEL).",
     ),
-    level: str = typer.Option("visit", help="Aggregation level: 'visit' or 'person'."),
+    level: str = typer.Option("person", help="Aggregation level: 'visit' or 'person'."),
     debug: bool = typer.Option(False, "--debug/--no-debug"),
 ) -> None:
     """
     Pipeline Step 4 — Feature engineering and aggregation.
 
-    Aggregates per-note extraction counts to visit level, merges with cohort
+    Aggregates per-note extraction counts to person level, merges with cohort
     labels, and saves a training-ready CSV.
     """
     _, run_dir = make_run_dir("feature_aggregation")
@@ -260,7 +343,15 @@ def aggregate_features(
         debug=debug,
     )
 
-    save_config_snapshot(cfg.__dict__ | {"pipeline_step": "aggregate_features"}, run_dir)
+    snapshot = {
+        k: str(v) if isinstance(v, Path) else v
+        for k, v in cfg.__dict__.items()
+    }
+
+    save_config_snapshot(
+        snapshot | {"pipeline_step": "aggregate_features"},
+        run_dir
+    )
 
     agg = FeatureAggregator(cfg, run_dir)
     feature_df = agg.run()
@@ -294,13 +385,20 @@ def evaluate(
     cfg = EvaluatorConfig(
         features_path=features_path,
         gold_standard_path=gold_standard_path,
-        out_dir=run_dir / "evaluation",
         target_precision=target_precision,
         target_recall=target_recall,
         debug=debug,
     )
 
-    save_config_snapshot(cfg.__dict__ | {"pipeline_step": "evaluate"}, run_dir)
+    snapshot = {
+        k: str(v) if isinstance(v, Path) else v
+        for k, v in cfg.__dict__.items()
+    }
+
+    save_config_snapshot(
+        snapshot | {"pipeline_step": "evaluate"},
+        run_dir
+    )
 
     evaluator = RuleEvaluator(cfg, run_dir)
     evaluator.run()
@@ -313,9 +411,12 @@ def evaluate(
 @app.command(help="Run the complete rule-based pipeline end-to-end.")
 @log_timing
 def run_rule_pipeline(
-    schema: str = typer.Option("CDMPHI"),
-    lexicon_path: Path = typer.Option(Path("lexicons/mrsa_risk_factors_v1.csv")),
-    skip_cohort: bool = typer.Option(False, "--skip-cohort", help="Skip cohort building (notes exist)."),
+    notes_path: Path = typer.Option(
+        Path("/sc/arion/projects/MRSA-HPI-MS/airms-app-host-and-hospital-adaptation-of-mrsa/mrsa_nlp/rule_based/data/interim/airms/notes/all/cohort_notes.parquet"),
+        help="Path to the merged cohort notes Parquet file.",
+    ),
+    lexicon_path: Path = typer.Option(Path("lexicons/mrsa_risk_factors_v3.csv")),
+    skip_cohort: bool = typer.Option(False, "--skip-cohort", help="Skip subset building (notes exist)."),
     skip_preprocess: bool = typer.Option(False, "--skip-preprocess"),
     skip_extract: bool = typer.Option(False, "--skip-extract"),
     debug: bool = typer.Option(False, "--debug/--no-debug"),
@@ -323,17 +424,15 @@ def run_rule_pipeline(
     """
     Run all pipeline steps sequentially.
 
-    Steps: build-cohort → preprocess → extract → aggregate-features
+    Steps: build-subset → preprocess → extract → aggregate-features
     Use --skip-* flags to resume from a specific step.
     """
     _, run_dir = make_run_dir("full_pipeline")
     logger.info("Full pipeline run dir: %s", run_dir)
 
     if not skip_cohort:
-        logger.info("=== Step 1/4: build-cohort ===")
-        cfg_cohort = CohortConfig(schema=schema, debug=debug)
-        conn = connect_hana()
-        CohortBuilder(cfg_cohort, conn).run()
+        logger.info("=== Step 1/4: build-subset ===")
+        SubsetBuilder(SubsetConfig(mrsa_cohort_notes_path=str(notes_path))).run()
 
     if not skip_preprocess:
         logger.info("=== Step 2/4: preprocess ===")

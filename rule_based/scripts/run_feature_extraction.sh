@@ -8,7 +8,7 @@
 #   2. Preprocessing has been run
 #
 # Usage:
-#   bash scripts/run_feature_extraction.sh [--debug]
+#   bash scripts/run_feature_extraction.sh [--debug] [--debug-n-notes N]
 
 set -euo pipefail
 
@@ -22,16 +22,18 @@ CONDA_ENV="mrsa-nlp-rule"
 LOG_LEVEL="INFO"
 PREPROCESSED_DIR="data/interim/airms/notes_preprocessed"
 EXTRACTIONS_DIR="data/interim/airms/extractions"
-COHORT_PATH="data/interim/airms/mrsa_cohort_person_list.parquet"
-LEXICON_PATH="lexicons/mrsa_risk_factors_v1.csv"
+COHORT_PATH="data/interim/airms/mrsa_cohort_person_list.csv"
+LEXICON_PATH="lexicons/mrsa_risk_factors_v3.csv"
 NEGATION_WINDOW=5
-LEVEL="visit"
+LEVEL="person"
 DEBUG=false
 DEBUG_N_NOTES=200
 
-for arg in "$@"; do
-    case $arg in
-        --debug) DEBUG=true ;;
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --debug)          DEBUG=true; LOG_LEVEL="DEBUG"; shift ;;
+        --debug-n-notes)  shift; DEBUG_N_NOTES="$1"; shift ;;
+        *)                shift ;;
     esac
 done
 

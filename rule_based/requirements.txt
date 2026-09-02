@@ -1,0 +1,12 @@
+ipykernel==7.3.0
+ipython==8.39.0
+matplotlib==3.10.9
+numpy==2.2.6
+pandas==2.3.3
+polaris==0.1
+pyarrow==24.0.0
+PyYAML==6.0.3
+rich==15.0.0
+tqdm==4.68.2
+typer==0.26.7
+seaborn==0.13.2
